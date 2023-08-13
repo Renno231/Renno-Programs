@@ -1,5 +1,5 @@
 local gpu = require("component").gpu
-local wrap = require("yawl-e.util.wrap")
+local wrap = require("yawl-e.util").wrap
 --=============================================================================
 
 ---@class Text:Widget

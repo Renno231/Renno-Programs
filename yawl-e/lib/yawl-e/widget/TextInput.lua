@@ -1,5 +1,5 @@
 local event = require("event")
-local wrap = require("yawl-e.util.wrap")
+local wrap = require("yawl-e.util").wrap
 local class = require("libClass2")
 local Text = require("yawl-e.widget.Text")
 local gpu = require("component").gpu
