@@ -111,4 +111,12 @@ function TextInput:draw()
     return true
 end
 
+function TextInput:Destroy()
+    if (self._keyDownEvent) then event.cancel(self._keyDownEvent --[[@as number]]) end
+    self._keyDownEvent = nil
+    if (self._touchEvent) then event.cancel(self._touchEvent --[[@as number]]) end
+    self._touchEvent = nil
+    Text.Destroy(self)
+end
+
 return TextInput
