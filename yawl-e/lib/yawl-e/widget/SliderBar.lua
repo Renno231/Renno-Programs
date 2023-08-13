@@ -108,7 +108,6 @@ function SliderBar:draw()
     --TODO : slider width
     if value then
         local percent = math.floor(((width - 1) * (value / (self:max() - self:min()))))
-        if newFG then gpu.setBackground(newFG) end
         gpu.fill(x + percent, y, 1, height, " ") --might make funny tall slider
     end
     gpu.setBackground(oldBG)
