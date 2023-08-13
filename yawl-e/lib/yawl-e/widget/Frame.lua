@@ -1,5 +1,5 @@
 local gpu = require("component").gpu
-local Widget = require("yawl.widget.Widget")
+local Widget = require("yawl-e.widget.Widget")
 local event = require("event")
 local computer = require("computer")
 
@@ -198,10 +198,12 @@ function Frame:draw()
 
     --draw widgets
     for _, element in pairs(self._childs) do
-        element:draw()
+        element:_tweenStep()
+        if element:draw() and element.drawBorder then element:drawBorder() end
     end
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
+    return true
 end
 
 ---Should the fix for bitBlt be used. Only apply to old OC versions.

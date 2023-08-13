@@ -8,8 +8,9 @@
 
 ---@class yaowbgllib
 local yawl = {
-    widget = require('yawl.widget'),
-    ImageFile = require("yawl.ImageFile")
+    widget = require('yawl-e.widget'),
+    ImageFile = require("yawl-e.ImageFile"),
+    util = require('yawl-e.util')
 }
 
 return yawl

@@ -1,6 +1,6 @@
 local gpu = require("component").gpu
 local class = require("libClass2")
-local Widget = require("yawl.widget.Widget")
+local Widget = require("yawl-e.widget.Widget")
 
 ---@class ToggleSwitch:Widget
 ---@field parent Widget
@@ -108,6 +108,7 @@ function ToggleSwitch:draw()
         gpu.fill(x, y, boundary, self:height(), " ")
     end
     gpu.setBackground(oldBG)
+    return true
 end
 
 return ToggleSwitch

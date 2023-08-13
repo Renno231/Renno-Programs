@@ -1,7 +1,7 @@
 local event = require("event")
-local text = require("text")
+local wrap = require("yawl-e.util.wrap")
 local class = require("libClass2")
-local Text = require("yawl.widget.Text")
+local Text = require("yawl-e.widget.Text")
 local gpu = require("component").gpu
 
 ---@class TextInput:Text
@@ -10,7 +10,7 @@ local gpu = require("component").gpu
 ---@field private _placeHolderChar string
 ---@operator call:TextInput
 ---@overload fun(parent:Frame,x:number,y:number,text:string,foregroundColor:number):TextInput
-local TextInput = require('libClass2')(Text)
+local TextInput = class(Text)
 
 ---@param value? string
 ---@return string
@@ -35,6 +35,13 @@ function TextInput:_onKeyDown(eventName, component, char, key, player)
     end
 end
 
+function TextInput:clearOnEnter(should)
+    checkArg(1, should, 'boolean', 'nil')
+    local oldValue = self._clearOnEnter or false
+    if (should ~= nil) then self._clearOnEnter = should end
+    return oldValue
+end
+
 function TextInput:callback(callback, ...)
     checkArg(1, callback, 'nil')
     return TextInput.defaultCallback
@@ -42,7 +49,8 @@ end
 
 function TextInput:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     if (eventName ~= "touch") then return end
-    if (not self._keyDownEvent) then
+    if button ~= 0 then self:text("") end
+    if button == 0 and (not self._keyDownEvent) then
         self._keyDownEvent = event.listen("key_down", function(...) self:_onKeyDown(...) end) --[[@as number]]
         self._touchEvent = event.listen("touch", function(eventName, uuid, x, y, button, playerName)
             if (not self:checkCollision(x, y)) then
@@ -50,6 +58,7 @@ function TextInput:defaultCallback(_, eventName, uuid, x, y, button, playerName)
                 self._keyDownEvent = nil
                 if (self._touchEvent) then event.cancel(self._touchEvent --[[@as number]]) end
                 self._touchEvent = nil
+                if self:clearOnEnter() then self:text("") end
             end
         end) --[[@as number]]
     end
@@ -64,15 +73,10 @@ function TextInput:multilines(value)
     return oldValue
 end
 
-function TextInput:cursorPos()
-    local y = self:absY()
-    for line in text.wrappedLines(self:text(), self:maxWidth(), self:maxWidth()) do
-        ---@cast line string
-        if ((y - self:absY()) + 1 <= self:maxHeight()) then
-            local x = self:absX() + #line
-        end
-        y = y + 1
-    end
+function TextInput:cursor(x,y)
+    checkArg(1, x, 'number', 'nil')
+    checkArg(1, y, 'number', 'nil')
+    
 end
 
 function TextInput:draw()
@@ -83,8 +87,8 @@ function TextInput:draw()
         gpu.setBackground(self:backgroundColor())
         gpu.fill(self:absX(), self:absY(), self:width(), self:height(), " ")
     end
-    local y = self:absY()
-    for line in text.wrappedLines(self:text(), self:maxWidth(), self:maxWidth()) do
+    local y, maxWidth = self:absY(), self:maxWidth()
+    for i, line in ipairs(wrap(self:text(), maxWidth)) do
         ---@cast line string
         if ((y - self:absY()) + 1 <= self:maxHeight()) then
             local x = self:absX()
@@ -104,6 +108,7 @@ function TextInput:draw()
     end
     gpu.setForeground(oldFgColor)
     gpu.setBackground(oldBgColor)
+    return true
 end
 
 return TextInput

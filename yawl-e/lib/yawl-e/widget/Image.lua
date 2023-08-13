@@ -1,7 +1,7 @@
 local gpu       = require("component").gpu
 local class     = require("libClass2")
-local Widget    = require("yawl.widget.Widget")
-local ImageFile = require("yawl.ImageFile")
+local Widget    = require("yawl-e.widget.Widget")
+local ImageFile = require("yawl-e.ImageFile")
 
 local HALF_CHAR = "▀"
 
@@ -88,6 +88,7 @@ function Image:draw()
 
     gpu.setBackground(bg)
     gpu.setForeground(fg)
+    return true
 end
 
 return Image

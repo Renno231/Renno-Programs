@@ -1,5 +1,5 @@
 local gpu = require("component").gpu
-local Widget = require("yawl.widget.Widget")
+local Widget = require("yawl-e.widget.Widget")
 local unicode = require("unicode")
 local keyboard = require('keyboard')
 
@@ -42,6 +42,15 @@ function SortedList:select(index, state) --getter/setter
     local oldValue = self._selection[index]
     if state ~= nil then --needs work 
         self._selection[index] = state --select
+    end
+    return oldValue
+end
+
+function SortedList:value(index, newval) --getter/setter, use delete to remove things
+    checkArg(1, index, 'number')
+    local oldValue = self._selection[index]
+    if newval ~= nil then --needs work 
+        self._list[index] = newval --overwrite
     end
     return oldValue
 end
@@ -118,7 +127,7 @@ function SortedList:filterBy(value) --sets the value that gets passed into filte
             self._contextScroll = nil
             self._contextStart = nil
             self._contextEnd = nil
-            self._highestContextIndex = nil
+            self._highestContextIndex = nil --could cause problems in the event the list is dynamic with tables
         else 
             self._contextScroll = 0
         end
@@ -198,8 +207,6 @@ function SortedList:scroll(value) --not perfect, needs refinement for when filte
                 end
             end
             self._contextScroll = math.max(math.min((self._contextEnd <= self:height() and self._contextScroll or #self._list), self._contextScroll + value), self._contextStart)
-        
-            self._debugTxt:text(string.format("%d | %d", self._contextScroll, value) )
         end
     end
     return oldValue
@@ -207,7 +214,7 @@ end
 
 function SortedList:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     if eventName == "touch" then
-        local index = self._shown[y - self:absY() + 1]
+        local index = self._shown[y - self:absY() + 1 + (self:bordered() and -1 or 0)]
         if button == 0 then
             if keyboard.isControlDown() then
                 self:select(index, not self:select(index))
@@ -227,7 +234,9 @@ end
 ---Draw the SortedList on screen
 function SortedList:draw()
     if (not self:visible()) then return end
-    local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    local isBordered = self:bordered()
+    local x, y, width, height = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0), self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
+    if height == 0 or width == 0 then return end
     local oldBG, oldFG = gpu.getBackground(), gpu.getForeground()
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     if newBG then gpu.setBackground(newBG) end
@@ -301,6 +310,7 @@ function SortedList:draw()
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
+    return true
 end
 
 return SortedList

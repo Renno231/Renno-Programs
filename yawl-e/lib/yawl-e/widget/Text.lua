@@ -1,6 +1,5 @@
 local gpu = require("component").gpu
-local text = require("text")
-
+local wrap = require("yawl-e.util.wrap")
 --=============================================================================
 
 ---@class Text:Widget
@@ -10,7 +9,7 @@ local text = require("text")
 ---@field private _maxHeight number
 ---@overload fun(parent:Frame,x:number,y:number,text:string,foregroundColor:number):Text
 ---@operator call:Text
-local Text = require('libClass2')(require("yawl.widget.Widget"))
+local Text = require('libClass2')(require("yawl-e.widget.Widget"))
 
 ---@param parent Frame
 ---@param x number
@@ -29,6 +28,7 @@ function Text:new(parent, x, y, text, foregroundColor)
     setmetatable(o, {__index = self})
     ---@cast o Text
     o:text(text)
+    o._parsedText = {}
     o:foregroundColor(foregroundColor)
     return o
 end
@@ -125,24 +125,22 @@ end
 ---@param value? number
 ---@return number
 function Text:height(value)
-    local lines = 0
-    for line in text.wrappedLines(self:text(), self:maxWidth(), self:maxWidth()) do
-        lines = lines + 1
-    end
     if (value ~= nil) then
         self:minHeight(0)
         self:maxHeight(math.huge)
         self:minHeight(value)
         self:maxHeight(value)
     end
-    return math.min(math.max(self:minHeight(), lines), self:maxHeight())
+    self._parsedText = wrap(self:text(), self:maxWidth())
+    return math.min(math.max(self:minHeight(), #self._parsedText), self:maxHeight())
 end
 
 ---@param value? number
 ---@return number
 function Text:width(value)
     local maxTextWidth = -1
-    for line in text.wrappedLines(self:text(), self:maxWidth(), self:maxWidth()) do
+    self._parsedText = wrap(self:text(), self:maxWidth())
+    for i, line in ipairs(self._parsedText) do
         if (#line > maxTextWidth) then
             maxTextWidth = #line
         end
@@ -174,7 +172,8 @@ function Text:draw()
         gpu.fill(self:absX(), self:absY(), self:width(), self:height(), " ")
     end
     local y = self:absY()
-    for line in text.wrappedLines(self:text(), self:maxWidth(), self:maxWidth()) do
+    self._parsedText = wrap(self:text(), self:maxWidth())
+    for i, line in ipairs(self._parsedText) do
         ---@cast line string
         if ((y - self:absY()) + 1 <= self:maxHeight()) then
             local x = self:absX()
@@ -194,6 +193,7 @@ function Text:draw()
     end
     gpu.setForeground(oldFgColor)
     gpu.setBackground(oldBgColor)
+    return true
 end
 
 return Text

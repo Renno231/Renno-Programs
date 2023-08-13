@@ -1,5 +1,5 @@
 local class = require("libClass2")
-local Frame = require("yawl.widget.Frame")
+local Frame = require("yawl-e.widget.Frame")
 local gpu = require("component").gpu
 
 --[[
@@ -168,7 +168,12 @@ function Histogram:draw()
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
-    return min, max, mean
+    return true
 end
+
+
+local characters = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
+local charsV = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
+local charsH = {" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"}
 
 return Histogram

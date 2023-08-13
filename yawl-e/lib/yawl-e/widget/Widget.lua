@@ -10,6 +10,7 @@
 ---@operator call:Widget
 ---@overload fun(parent:Frame,x:number,y:number):Widget
 local Widget = require("libClass2")()
+local gpu = require("component").gpu
 
 function Widget:defaultCallback()
 end
@@ -188,6 +189,60 @@ function Widget:visible(value)
     return oldVal
 end
 
+---A set of characters used to draw the border.
+---@param value? string
+---@return string
+function Widget:borderSet(value)
+    checkArg(1, value, 'string', 'nil')
+    local oldValue = self._borderSet
+    if (value ~= nil) then self._borderSet = value end
+    return oldValue
+end
+
+function Widget:bordered(value)
+    checkArg(1, value, 'boolean', 'nil')
+    local oldValue = self._bordered
+    if (value ~= nil) then self._bordered = value end
+    return oldValue
+end
+
+function Widget:drawBorder()
+    if not self:bordered() or not self:borderSet() then return end
+    local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    local newBG = self:backgroundColor() 
+    if newBG then
+        local oldBG = gpu.getBackground()
+        gpu.setBackground(newBG --[[@as number]])
+        local borderSet = self:borderSet()
+        if borderSet then
+            local oldFG = self._foregroundColor and gpu.getForeground()
+            if oldFG then gpu.setForeground(self._foregroundColor) end
+            local unicode = require("unicode")
+            local setLength = unicode.len(borderSet)
+            if setLength > 3 then
+                gpu.set(x, y, unicode.sub(borderSet, 1, 1))                                         --topleft
+                gpu.set(x + width - 1, y, unicode.sub(borderSet, 2, 2))                             --topright
+                gpu.set(x, y + height - 1, unicode.sub(borderSet, 3, 3))                            --bottomleft
+                gpu.set(x + width - 1, y + height - 1, unicode.sub(borderSet, 4, 4))                --bottomright
+                if setLength > 4 then
+                    gpu.fill(x + 1, y, width - 2, 1, unicode.sub(borderSet, 5, 5))                  --top
+                    if setLength == 6 then
+                        gpu.fill(x + 1, y + height - 1, width - 2, 1, unicode.sub(borderSet, 5, 5)) --bottom
+                        gpu.fill(x, y + 1, 1, height - 2, unicode.sub(borderSet, 6, 6))             --left
+                        gpu.fill(x + width - 1, y + 1, 1, height - 2, unicode.sub(borderSet, 6, 6)) -- right
+                    elseif setLength == 8 then
+                        gpu.fill(x + 1, y + height - 1, width - 2, 1, unicode.sub(borderSet, 6, 6)) --bottom
+                        gpu.fill(x, y + 1, 1, height - 2, unicode.sub(borderSet, 7, 7))             --left
+                        gpu.fill(x + width - 1, y + 1, 1, height - 2, unicode.sub(borderSet, 8, 8)) -- right
+                    end
+                end
+            end
+            if oldFG then gpu.setForeground(oldFG) end
+        end
+        gpu.setBackground(oldBG)
+    end
+end
+
 ---If value is provided, set if the container is enabled and return the old value.\
 ---If value is not provided, return the current enabled status
 ---@param value? boolean
@@ -244,6 +299,77 @@ end
 ---Draw the widgets in the container
 function Widget:draw()
     if (not self:visible()) then return end
+    return true
+end
+
+--size tween (linear)
+function Widget:tweenSize(width, height, speed)
+    checkArg(1, width, 'number', 'nil')
+    checkArg(1, height, 'number', 'nil')
+    checkArg(1, speed, 'number', 'nil')
+    local goalWidth, goalHeight
+    if self._tweenSize then
+        goalWidth, goalHeight = self._tweenSize.goal.width, self._tweenSize.goal.height
+    end
+    if width and height then
+        self._tweenSize = {speed = math.min(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {width = width, height = height}, original = {width = self:width(), height = self:height()}}
+    end
+    return goalWidth, goalHeight
+end
+
+--position tween (linear)
+function Widget:tweenPosition(x, y, speed) --allow cancellation
+    checkArg(1, x, 'number', 'nil')
+    checkArg(1, y, 'number', 'nil')
+    checkArg(1, speed, 'number', 'nil')
+    local goalX, goalY
+    if self._tweenPos then
+        goalX, goalY = self._tweenPos.goal.x, self._tweenPos.goal.y
+    end
+    if x and y then
+        self._tweenPos = {speed = math.min(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {x = x, y = y}, original = {x = self:x(), y = self:y()}} --maybe need to round if they are decimals
+    end
+    return goalX, goalY
+end
+
+function Widget:_tweenStep()
+    if not self:enabled() or not self:visible() then return end
+    --could add looping and total iterations, the ability to replay and the ability to pause
+    --could also add bezier lerps
+    if self._tweenPos then
+        --require("component").ocelot.log('got tweenPos table')
+        local ox, oy = self._tweenPos.original.x, self._tweenPos.original.y
+        local nx, ny = self._tweenPos.goal.x, self._tweenPos.goal.y --new
+        local targetStep = 10
+        if self._tweenPos.step > targetStep then
+            self._tweenPos = nil
+            --could push a psuedo tweenPosFinished event here
+        else
+            local speed = self._tweenPos.speed / 10
+            self:position(math.floor(ox + (nx - ox) * speed + 0.5), math.floor(oy + (ny - oy) * speed + 0.5 ) )
+            self._tweenPos.step = self._tweenPos.step + 1
+        end
+    end
+    if self._tweenSize then
+        local owidth, oheight = self._tweenSize.original.width, self._tweenSize.original.height
+        local nwidth, nheight = self._tweenSize.goal.width, self._tweenSize.goal.height
+    
+        local targetStep = 10
+        if self._tweenSize.step > targetStep then
+            self._tweenSize = nil
+            self:size(nwidth, nheight) -- Set the final size to ensure accuracy, might not be necessary
+            --could push a psuedo tweenSizeFinished event here
+        else
+            local t = self._tweenSize.step / targetStep
+            self:size(math.floor(owidth + (nwidth - owidth) * t + 0.5), math.floor(oheight + (nheight - oheight) * t + 0.5))
+
+            self._tweenSize.step = self._tweenSize.step + 1
+        end
+    end
+end
+
+function Widget:Destroy() --unparent and then .. ? 
+
 end
 
 return Widget

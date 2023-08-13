@@ -1,5 +1,5 @@
 local gpu = require("component").gpu
-local Widget = require("yawl.widget.Widget")
+local Widget = require("yawl-e.widget.Widget")
 
 ---@class Rectangle:Widget
 ---@field private _size Size
@@ -37,6 +37,7 @@ function Rectangle:draw()
     local bk = gpu.setBackground(self:backgroundColor())
     gpu.fill(self:absX(), self:absY(), self:width(), self:height(), " ")
     gpu.setBackground(bk)
+    return true
 end
 
 return Rectangle

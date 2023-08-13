@@ -1,5 +1,5 @@
 local gpu = require("component").gpu
-local Widget = require("yawl.widget.Widget")
+local Widget = require("yawl-e.widget.Widget")
 
 ---@class SliderBar:Widget
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,min:number|nil,max:number|nil,backgroundColor:number|nil,foregroundColor:number|nil):SliderBar
@@ -113,6 +113,7 @@ function SliderBar:draw()
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
+    return true
 end
 
 return SliderBar

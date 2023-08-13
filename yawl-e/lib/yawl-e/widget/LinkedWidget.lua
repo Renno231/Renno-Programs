@@ -1,5 +1,5 @@
 local class = require("libClass2")
-local Frame = require("yawl.widget.Frame")
+local Frame = require("yawl-e.widget.Frame")
 
 ---@class LinkedWidget:Frame
 ---@field parent Frame
@@ -60,6 +60,7 @@ function LinkedWidget:draw()
         w:position(1, 1)
     end
     self.parent.draw(self)
+    return true
 end
 
 return LinkedWidget

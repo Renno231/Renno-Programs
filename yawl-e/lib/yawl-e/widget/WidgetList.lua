@@ -1,4 +1,4 @@
-local Frame = require("yawl.widget.Frame")
+local Frame = require("yawl-e.widget.Frame")
 
 ---@class WidgetList:Frame
 ---@operator call:WidgetList
@@ -22,6 +22,7 @@ function WidgetList:draw()
         end
     end
     self.parent.draw(self)
+    return true
 end
 
 return WidgetList
