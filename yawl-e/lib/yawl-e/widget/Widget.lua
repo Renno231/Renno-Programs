@@ -196,7 +196,8 @@ end
 function Widget:borderSet(value)
     checkArg(1, value, 'string', 'nil')
     local oldValue = self._borderSet
-    if (value ~= nil) then self._borderSet = value end
+    local setLen = value~=nil and unicode.len(value) or 0 
+    if (value ~= nil) and (setLen == 4 or setLen == 6 or setLen == 8)  then self._borderSet = value end
     return oldValue
 end
 
@@ -207,9 +208,17 @@ function Widget:bordered(value)
     return oldValue
 end
 
+function Widget:_borderOverride(value)
+    checkArg(1, value, 'boolean', 'nil')
+    local oldValue = self._borderoverride
+    if (value ~= nil) then self._borderoverride = value end
+    return oldValue
+end
+
 function Widget:drawBorder()
     if not self:bordered() or not self:borderSet() then return end
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    if width < 2 or height < 2 then return end
     local newBG = self:backgroundColor() 
     if newBG then
         local oldBG = gpu.getBackground()
@@ -218,24 +227,18 @@ function Widget:drawBorder()
         if borderSet then
             local oldFG = self._foregroundColor and gpu.getForeground()
             if oldFG then gpu.setForeground(self._foregroundColor) end
-            local unicode = require("unicode")
             local setLength = unicode.len(borderSet)
             if setLength > 3 then
-                gpu.set(x, y, unicode.sub(borderSet, 1, 1))                                         --topleft
-                gpu.set(x + width - 1, y, unicode.sub(borderSet, 2, 2))                             --topright
-                gpu.set(x, y + height - 1, unicode.sub(borderSet, 3, 3))                            --bottomleft
-                gpu.set(x + width - 1, y + height - 1, unicode.sub(borderSet, 4, 4))                --bottomright
+                gpu.set(x, y, unicode.charAt(borderSet, 1))                                         --topleft
+                gpu.set(x + width - 1, y, unicode.charAt(borderSet, 2))                             --topright
+                gpu.set(x, y + height - 1, unicode.charAt(borderSet, 3))                            --bottomleft
+                gpu.set(x + width - 1, y + height - 1, unicode.charAt(borderSet, 4))                --bottomright
                 if setLength > 4 then
-                    gpu.fill(x + 1, y, width - 2, 1, unicode.sub(borderSet, 5, 5))                  --top
-                    if setLength == 6 then
-                        gpu.fill(x + 1, y + height - 1, width - 2, 1, unicode.sub(borderSet, 5, 5)) --bottom
-                        gpu.fill(x, y + 1, 1, height - 2, unicode.sub(borderSet, 6, 6))             --left
-                        gpu.fill(x + width - 1, y + 1, 1, height - 2, unicode.sub(borderSet, 6, 6)) -- right
-                    elseif setLength == 8 then
-                        gpu.fill(x + 1, y + height - 1, width - 2, 1, unicode.sub(borderSet, 6, 6)) --bottom
-                        gpu.fill(x, y + 1, 1, height - 2, unicode.sub(borderSet, 7, 7))             --left
-                        gpu.fill(x + width - 1, y + 1, 1, height - 2, unicode.sub(borderSet, 8, 8)) -- right
-                    end
+                    gpu.fill(x + 1, y, width - 2, 1, unicode.charAt(borderSet, 5))                  --top
+                    local isSix = setLength == 6
+                    gpu.fill(x + 1, y + height - 1, width - 2, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
+                    gpu.fill(x, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 7))             --left
+                    gpu.fill(x + width - 1, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 8)) -- right
                 end
             end
             if oldFG then gpu.setForeground(oldFG) end
