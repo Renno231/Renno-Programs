@@ -109,6 +109,11 @@ function Frame:removeChild(child)
     end
 end
 
+function Frame:clearChildren()
+    self._childs = {}
+    return true
+end
+
 function Frame:propagateEvent(eName, screenAddress, x, y, ...)
     if (not self:enabled()) then return end
     --TODO : sort child by z, making sure to keep the original order in a new table
