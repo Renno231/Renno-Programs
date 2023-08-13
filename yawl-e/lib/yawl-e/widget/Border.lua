@@ -70,10 +70,4 @@ function Border:draw()
     return true
 end
 
-Border.DOUBLE_LINE      = "╔╗╚╝═║"
-Border.SIMPLE_LINE      = "┌┐└┘─│"
-Border.BOLD_SIMPLE_LINE = "┏┓┗┛━┃"
-Border.THICK_EDGE_LINE  = "▛▜▙▟"..unicode.char(0x1fb83).."▄▌▐"
-Border.THINNER_EDGE_LINE= unicode.char(0x1fb15)..unicode.char(0x1fb28)..unicode.char(0x1fb32)..unicode.char(0x1fb37)..unicode.char(0x1fb02)..unicode.char(0x1fb2d).."▌▐"
-
 return Border

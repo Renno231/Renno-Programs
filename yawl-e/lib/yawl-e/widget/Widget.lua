@@ -11,6 +11,7 @@
 ---@overload fun(parent:Frame,x:number,y:number):Widget
 local Widget = require("libClass2")()
 local gpu = require("component").gpu
+local unicode = require("unicode")
 
 function Widget:defaultCallback()
 end
@@ -371,5 +372,13 @@ end
 function Widget:Destroy() --unparent and then .. ? 
 
 end
+
+Widget.Borders = {}
+Widget.Borders.DOUBLE_LINE      = "╔╗╚╝═║"
+Widget.Borders.SIMPLE_LINE      = "┌┐└┘─│"
+Widget.Borders.BOLD_SIMPLE_LINE = "┏┓┗┛━┃"
+Widget.Borders.THICK_EDGE_LINE  = "▛▜▙▟"..unicode.char(0x1fb83).."▄▌▐"
+Widget.Borders.THINNER_EDGE_LINE= unicode.char(0x1fb15)..unicode.char(0x1fb28)..unicode.char(0x1fb32)..unicode.char(0x1fb37)..unicode.char(0x1fb02)..unicode.char(0x1fb2d).."▌▐"
+
 
 return Widget
