@@ -29,7 +29,6 @@ function ProgressBar:new(parent, x, y, width, height, backgroundColor, foregroun
     setmetatable(o, {__index = self})
     o._size = {width = 1, height = 1}
     ---@cast o ProgressBar
-    o._debugtxt = require("yawl-e.widget.Text")(parent, x, y-1, "debug")
     o:size(width, height) --probably need to override the size so minimum is 1x1
     o:value(0)
     o:backgroundColor(backgroundColor)
@@ -90,7 +89,6 @@ function ProgressBar:draw()
         gpu.fill(x , y, percent, height, fillChar) --might make funny tall slider
         --custom border
         local isBordered, borderSet = self:bordered(), self:borderSet()
-        --self._debugtxt:text(string.format(("%s "):rep(8),  newBG, isBordered, borderSet~=nil, width > 2, height > 2, fillChar == " ", fillBG, percent > 1 ))
         if newBG and isBordered and borderSet and width > 1 and height > 1 and fillChar == " " and fillBG and percent > 1 then
             local setLength = unicode.len(borderSet)
             if setLength > 3 then
