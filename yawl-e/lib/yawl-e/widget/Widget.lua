@@ -36,6 +36,7 @@ function Widget:new(parent, x, y)
     o._parentFrame = parent
     o._position = {x = 1, y = 1}
     o._size = {width = 1, height = 1}
+    o._welds = {} --just for reference on doing cleanup
     o:position(x, y)
     if (parent) then parent:addChild(o) end
     return o
@@ -372,8 +373,39 @@ function Widget:_tweenStep()
     end
 end
 
+function Widget:weld(weldedTo, x, y)
+    checkArg(1, weldedTo, 'table', 'boolean')
+    checkArg(1, x, 'number', 'nil')
+    checkArg(1, y, 'number', 'nil')
+    
+    local oldVal = self._weld
+    if type(weldedTo)=="table" and weldedTo._welds and x and y then
+        if self._weld then
+            self._weld.weldedTo._welds[self] = nil --break and old welds
+        end
+        self._weld = {weldedTo = weldedTo, x = x, y = y}
+        weldedTo._welds[self] = true 
+    elseif weldedTo == false and self._weld then
+        self._weld.weldedTo._welds[self] = nil -- breaks the reference
+        self._weld = nil
+    end
+    if oldVal then
+        oldVal = {weldedTo = oldVal.weldedTo, x = oldVal.x, y = oldVal.y} --fresh table, don't want to pass the original since its by reference
+    end
+    return oldVal
+end
+
 function Widget:Destroy() --unparent and then .. ? 
 
+    self:weld(false) -- breaks its own weld
+    for obj, _ in pairs (self._welds) do
+        obj:weld(false) -- breaks any attached welds
+    end
+    local parent = self:getParent()
+    if parent then parent:removeChild(self) end
+    if self.clearChildren then --should frames destroy any child objects when being destroyed?
+        self:clearChildren()
+    end
 end
 
 Widget.Borders = {}
@@ -382,6 +414,5 @@ Widget.Borders.SIMPLE_LINE      = "┌┐└┘─│"
 Widget.Borders.BOLD_SIMPLE_LINE = "┏┓┗┛━┃"
 Widget.Borders.THICK_EDGE_LINE  = "▛▜▙▟"..unicode.char(0x1fb83).."▄▌▐"
 Widget.Borders.THINNER_EDGE_LINE= unicode.char(0x1fb15)..unicode.char(0x1fb28)..unicode.char(0x1fb32)..unicode.char(0x1fb37)..unicode.char(0x1fb02)..unicode.char(0x1fb2d).."▌▐"
-
 
 return Widget
