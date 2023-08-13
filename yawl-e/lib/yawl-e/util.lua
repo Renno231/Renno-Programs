@@ -1,5 +1,6 @@
 ---@class yawlUtils
-
+local unicode = require("unicode")
+unicode.charAt = function(str, index) return unicode.sub(str, index, index) end
 local utils = {}
 
 ---Take a color int (hex) and return it's red green and blue components
