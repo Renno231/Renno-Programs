@@ -23,13 +23,13 @@ function Text:new(parent, x, y, text, foregroundColor)
     checkArg(2, x, 'number', 'table')
     checkArg(3, y, 'number', 'nil')
     checkArg(4, text, 'string')
-    checkArg(5, foregroundColor, 'number')
+    checkArg(5, foregroundColor, 'number', 'nil')
     if (type(x) == "table") then checkArg(3, y, 'nil') else checkArg(3, y, 'number') end
     setmetatable(o, {__index = self})
     ---@cast o Text
     o:text(text)
     o._parsedText = {}
-    o:foregroundColor(foregroundColor)
+    o:foregroundColor(foregroundColor or 0xffffff)
     return o
 end
 
