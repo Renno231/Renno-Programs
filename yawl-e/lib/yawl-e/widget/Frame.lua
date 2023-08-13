@@ -199,7 +199,7 @@ function Frame:draw()
     --draw widgets
     for _, element in pairs(self._childs) do
         element:_tweenStep()
-        if element:draw() and element.drawBorder then element:drawBorder() end
+        if element:draw() and element.drawBorder and not element._borderoverride then element:drawBorder() end
     end
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
