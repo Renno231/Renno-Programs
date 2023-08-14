@@ -177,7 +177,6 @@ end
 function Frame:draw()
     if (not self:visible()) then return end
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
-
     --init frame buffer
     local defaultBuffer, newBuffer = self:_initBuffer()
 
@@ -204,8 +203,11 @@ function Frame:draw()
     --draw widgets
     for _, element in pairs(self._childs) do
         element:_tweenStep()
-        if element:draw() and element.drawBorder and not element._borderoverride then element:drawBorder() end
+        if element:draw() and element.drawBorder and not element._borderoverride then 
+            element:drawBorder() 
+        end
     end
+    
     --might need to call self:drawBorder() like for the elements ^
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
