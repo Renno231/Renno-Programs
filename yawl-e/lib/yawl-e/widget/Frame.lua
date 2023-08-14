@@ -206,6 +206,7 @@ function Frame:draw()
         element:_tweenStep()
         if element:draw() and element.drawBorder and not element._borderoverride then element:drawBorder() end
     end
+    --might need to call self:drawBorder() like for the elements ^
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
     return true
