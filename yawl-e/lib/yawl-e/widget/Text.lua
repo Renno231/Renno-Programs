@@ -2,6 +2,18 @@ local gpu = require("component").gpu
 local wrap = require("yawl-e.util").wrap
 --=============================================================================
 
+local txtAlignments = {
+    ["top left"] = {-1,-1},
+    ["top center"] = {0,-1},
+    ["top right"] = {1,-1},
+    ["middle left"] = {-1,0},
+    ["center"] = {0,0},
+    ["middle right"] = {1,0},
+    ["bottom left"] = {-1,1},
+    ["bottom center"] = {0,1},
+    ["bottom right"] = {1,1},
+}
+
 ---@class Text:Widget
 ---@field private _text string
 ---@field private _foregroundColor number
@@ -9,7 +21,8 @@ local wrap = require("yawl-e.util").wrap
 ---@field private _maxHeight number
 ---@overload fun(parent:Frame,x:number,y:number,text:string,foregroundColor:number):Text
 ---@operator call:Text
-local Text = require('libClass2')(require("yawl-e.widget.Widget"))
+local Widget = require("yawl-e.widget.Widget")
+local Text = require('libClass2')(Widget)
 
 ---@param parent Frame
 ---@param x number
@@ -36,9 +49,8 @@ end
 ---@param value? string
 ---@return string
 function Text:text(value)
-    checkArg(1, value, 'string', 'nil')
     local oldValue = self._text
-    if (value) then self._text = value end
+    if (value) then self._text = tostring(value) end
     return oldValue
 end
 
@@ -153,15 +165,25 @@ function Text:width(value)
     end
     return math.min(math.max(self:minWidth(), maxTextWidth), self:maxWidth())
 end
-
----@param value? boolean
----@return boolean
-function Text:center(value)
-    checkArg(1, value, 'boolean', 'nil')
-    local oldValue = self._center or false
-    if (value ~= nil) then self._center = value end
+--[=[
+---@param value? number
+---@return number
+function Text:textAlignment(x,y) -- range from -1,-1 to 1,1 where 0,0 is the center, default is -1,-1
+    checkArg(1, x, 'number', 'string', 'nil') --could make it a string so they can pass in the name of the alignment, e.g. "center" or "top left"
+    checkArg(1, y, 'number', 'nil')
+    local oldValue = self._txtalignment
+    if type(x) == "string" and y == nil then
+        if txtAlignments[x] then
+            self._txtalignment = {x = txtAlignments[x][1], y = txtAlignments[x][2]}
+        end
+    elseif x and y then 
+        self._txtalignment = {x = x, y = y}
+    end
+    if oldValue then
+        oldValue = {x = oldValue.x, y = oldValue.y} --fresh table
+    end
     return oldValue
-end
+end]=]
 
 function Text:draw()
     if (not self:visible()) then return end
@@ -177,9 +199,9 @@ function Text:draw()
         ---@cast line string
         if ((y - self:absY()) + 1 <= self:maxHeight()) then
             local x = self:absX()
-            if (self:center() and self:minWidth() == self:maxWidth()) then
+            --[[if (self:center() and self:minWidth() == self:maxWidth()) then
                 x = x + (self:width() - #line) / 2
-            end
+            end]]
             for c in line:gmatch(".") do
                 local s, _, _, bg = pcall(gpu.get, x, y)
                 if (s ~= false) then

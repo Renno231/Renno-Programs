@@ -313,4 +313,12 @@ function SortedList:draw()
     return true
 end
 
+function SortedList:Destroy()
+    self:mount(false)
+    self._list = nil
+    self._shown = nil
+    self._selection = nil
+    Widget.Destroy(self)
+end
+
 return SortedList

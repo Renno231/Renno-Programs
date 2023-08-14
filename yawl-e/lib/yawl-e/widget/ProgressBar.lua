@@ -21,8 +21,6 @@ function ProgressBar:new(parent, x, y, width, height, backgroundColor, foregroun
     checkArg(3, y, 'number')
     checkArg(4, width, 'number')
     checkArg(5, height, 'number')
-    checkArg(4, min, 'number', 'nil')
-    checkArg(5, max, 'number', 'nil')
     checkArg(6, backgroundColor, 'number', 'nil')
     checkArg(6, foregroundColor, 'number', 'nil')
     local o = self.parent(parent, x, y)
@@ -70,7 +68,7 @@ function ProgressBar:adjust(value)
     checkArg(1, value, 'number')
     return self:value(self:value() + value)
 end
-
+--TODO: add "fillDirection" so that bars can be vertical up/down as well as left/right
 function ProgressBar:draw()
     if (not self:visible()) then return end
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
