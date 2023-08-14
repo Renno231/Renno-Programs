@@ -165,7 +165,7 @@ function Text:width(value)
     end
     return math.min(math.max(self:minWidth(), maxTextWidth), self:maxWidth())
 end
-
+--[=[
 ---@param value? number
 ---@return number
 function Text:textAlignment(x,y) -- range from -1,-1 to 1,1 where 0,0 is the center, default is -1,-1
@@ -183,7 +183,7 @@ function Text:textAlignment(x,y) -- range from -1,-1 to 1,1 where 0,0 is the cen
         oldValue = {x = oldValue.x, y = oldValue.y} --fresh table
     end
     return oldValue
-end
+end]=]
 
 function Text:draw()
     if (not self:visible()) then return end
@@ -199,9 +199,9 @@ function Text:draw()
         ---@cast line string
         if ((y - self:absY()) + 1 <= self:maxHeight()) then
             local x = self:absX()
-            if (self:center() and self:minWidth() == self:maxWidth()) then
+            --[[if (self:center() and self:minWidth() == self:maxWidth()) then
                 x = x + (self:width() - #line) / 2
-            end
+            end]]
             for c in line:gmatch(".") do
                 local s, _, _, bg = pcall(gpu.get, x, y)
                 if (s ~= false) then

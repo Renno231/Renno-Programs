@@ -92,9 +92,9 @@ function TextInput:draw()
         ---@cast line string
         if ((y - self:absY()) + 1 <= self:maxHeight()) then
             local x = self:absX()
-            if (self:center() and self:minWidth() == self:maxWidth()) then
+            --[[if (self:center() and self:minWidth() == self:maxWidth()) then
                 x = x + (self:width() - #line) / 2
-            end
+            end]]
             for c in line:gmatch(".") do
                 local s, _, _, bg = pcall(gpu.get, x, y)
                 if (s ~= false) then
