@@ -1,4 +1,4 @@
-local yaowbglWidget = {
+local yawle = {
     Widget       = require('yawl-e.widget.Widget'),
     Rectangle    = require('yawl-e.widget.Rectangle'),
     Frame        = require('yawl-e.widget.Frame'),
@@ -16,4 +16,8 @@ local yaowbglWidget = {
     Button       = require("yawl-e.widget.Button")
 }
 
-return yaowbglWidget
+for class, object in pairs (yawle) do
+    object.Class = class
+end
+
+return yawle
