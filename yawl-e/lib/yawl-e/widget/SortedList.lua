@@ -48,7 +48,7 @@ end
 
 function SortedList:value(index, newval) --getter/setter, use delete to remove things
     checkArg(1, index, 'number')
-    local oldValue = self._selection[index]
+    local oldValue = self._list[index]
     if newval ~= nil then --needs work 
         self._list[index] = newval --overwrite
     end
@@ -297,7 +297,7 @@ function SortedList:draw()
                 listValue = (not succ and '(format)' or '') .. returned --should be fine
             end
             listValue = (isNumbered and string.format(linePrefix, line, index) or "") .. tostring(listValue):gsub("\n","; ")
-            local isSelected = self:select(index)
+            local isSelected = self._selection[index]
             if isSelected and newFG and newBG then gpu.setBackground(newFG) gpu.setForeground(newBG) end
             gpu.set(x, y+line-1, unicode.sub(listValue, 1, width) ) --do the formatting here
             if isSelected and newFG and newBG then gpu.setBackground(newBG) gpu.setForeground(newFG) end
