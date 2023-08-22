@@ -20,6 +20,8 @@ function DropdownList:new(parent, x, y, width, height, backgroundColor, listobj)
     ---@cast o DropdownList
     o:list(listobj or SortedList(parent, x, y+height, width, 5, backgroundColor))
     o:list():foregroundColor(0xffffff)
+    
+    o:list():weld(o, 0, 1)
     o:width(width)
     o:drop(false)
     o:size(width, height)
@@ -127,7 +129,6 @@ function DropdownList:draw()
     gpu.fill(x, y, width, height, " ") --overwrite the background
     local list = self._list
     if not list then return end
-    list:position(self:x(), self:y()+1)
     list:width(width)
     local listValue = tostring(list._list[list:getSelection()[1]] or "")
     if not listValue then return end
