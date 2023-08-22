@@ -192,7 +192,7 @@ function Frame:draw()
         end
     end
     if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
-
+    self:_tweenStep()
     --draw widgets
     for _, element in pairs(self._childs) do
         element:_tweenStep()
@@ -200,7 +200,7 @@ function Frame:draw()
             element:drawBorder() 
         end
     end
-    
+    if self.drawBorder and not self._borderoverride then self:drawBorder() end
     --might need to call self:drawBorder() like for the elements ^
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
