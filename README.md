@@ -2,7 +2,8 @@
 This repository houses programs made by Renno231 for OPPM (OpenPrograms Package Manager).
 
 # Projects
-yawl-e: Yet Another Widget Library (Enhanced). An enhanced fork of YAWL, a Widget-based GUI library made by AR2000 that takes advantage of GPU VRAM buffering added in OpenComputers 1.7.6 for more advanced GUIs.
+## yawl-e
+Yet Another Widget Library (Enhanced). An enhanced fork of YAWL, a Widget-based GUI library made by AR2000 that takes advantage of GPU VRAM buffering added in OpenComputers 1.7.6 for more advanced GUIs.
 <br><br> To install and use yawl-e follow these instructions:
 - install oppm
 - run `oppm register AR2000AR/openComputers_codes`
