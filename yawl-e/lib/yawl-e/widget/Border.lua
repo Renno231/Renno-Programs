@@ -69,6 +69,7 @@ function Border:draw()
         --probably need to do autoFitWidth() and autoFitHeight() individually or do something like self:autoFit(width, height) as booleans
         for _, element in pairs(self._childs) do
             element:_tweenStep()
+            element:_calculateWeld()
             --calcualte the Border dimensions and whatnot here after tweenstep
             if element:visible() then
                 local distWidth = element:x() + element:width()

@@ -196,6 +196,7 @@ function Frame:draw()
     --draw widgets
     for _, element in pairs(self._childs) do
         element:_tweenStep()
+        element:_calculateWeld()
         if element:draw() and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end
