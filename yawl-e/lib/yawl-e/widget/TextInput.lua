@@ -4,9 +4,18 @@ local class = require("libClass2")
 local Text = require("yawl-e.widget.Text")
 local gpu = require("component").gpu
 
+--[[
+    TODO
+        cursor
+            should it be a full space blink that inverts the color of the character it overlaps?
+            should it be a | or similar character that it flips between with the character it overlaps?
+        
+        add listener for paste event
+]]
+
 ---@class TextInput:Text
----@field private _keyDownEvent number
----@field private _touchEvent number
+---@field private _listeners.keyDownEvent number
+---@field private _listeners.touchEvent number
 ---@field private _placeHolderChar string
 ---@operator call:TextInput
 ---@overload fun(parent:Frame,x:number,y:number,text:string,foregroundColor:number):TextInput
@@ -26,10 +35,10 @@ function TextInput:_onKeyDown(eventName, component, char, key, player)
     if (char == 8) then                                --backspace
         self:text(string.sub(self:text(), 0, -2))
     elseif (char == 13 and not self:multilines()) then --return
-        event.cancel(self._keyDownEvent)
-        self._keyDownEvent = nil
-        event.cancel(self._touchEvent)
-        self._touchEvent = nil
+        event.cancel(self._listeners.keyDownEvent)
+        self._listeners.keyDownEvent = nil
+        event.cancel(self._listeners.touchEvent)
+        self._listeners.touchEvent = nil
     elseif (char ~= 0) then
         self:text(self:text() .. string.char(char))
     end
@@ -50,14 +59,14 @@ end
 function TextInput:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     if (eventName ~= "touch") then return end
     if button ~= 0 then self:text("") end
-    if button == 0 and (not self._keyDownEvent) then
-        self._keyDownEvent = event.listen("key_down", function(...) self:_onKeyDown(...) end) --[[@as number]]
-        self._touchEvent = event.listen("touch", function(eventName, uuid, x, y, button, playerName)
+    if button == 0 and (not self._listeners.keyDownEvent) then
+        self._listeners.keyDownEvent = event.listen("key_down", function(...) self:_onKeyDown(...) end) --[[@as number]]
+        self._listeners.touchEvent = event.listen("touch", function(eventName, uuid, x, y, button, playerName)
             if (not self:checkCollision(x, y)) then
-                if (self._keyDownEvent) then event.cancel(self._keyDownEvent --[[@as number]]) end
-                self._keyDownEvent = nil
-                if (self._touchEvent) then event.cancel(self._touchEvent --[[@as number]]) end
-                self._touchEvent = nil
+                if (self._listeners.keyDownEvent) then event.cancel(self._listeners.keyDownEvent --[[@as number]]) end
+                self._listeners.keyDownEvent = nil
+                if (self._listeners.touchEvent) then event.cancel(self._listeners.touchEvent --[[@as number]]) end
+                self._listeners.touchEvent = nil
                 if self:clearOnEnter() then self:text("") end
             end
         end) --[[@as number]]
@@ -73,10 +82,34 @@ function TextInput:multilines(value)
     return oldValue
 end
 
-function TextInput:cursor(x,y)
+function TextInput:cursor(x,y) --if x and y, x specifies the char on the line y points to, if just x, it's the char at the index in the normal string
     checkArg(1, x, 'number', 'nil')
     checkArg(1, y, 'number', 'nil')
     
+end
+
+function TextInput:cursorChar(char)
+
+end
+
+function TextInput:append(str) --inserts at the current cursor position
+
+end
+
+function TextInput:backspace(num) --how many characters to the left or right of the cursor to delete
+
+end
+
+function TextInput:cursorBlinks(bool) --yes or no
+    
+end
+
+function TextInput:cursorBlinkTime(num) --some amount of time inbetween blinks, default 1
+
+end
+
+function TextInput:getLine(x, y) --returns the string that's currently displayed (at the specified position if provideed)
+
 end
 
 function TextInput:draw()
@@ -109,14 +142,6 @@ function TextInput:draw()
     gpu.setForeground(oldFgColor)
     gpu.setBackground(oldBgColor)
     return true
-end
-
-function TextInput:Destroy()
-    if (self._keyDownEvent) then event.cancel(self._keyDownEvent --[[@as number]]) end
-    self._keyDownEvent = nil
-    if (self._touchEvent) then event.cancel(self._touchEvent --[[@as number]]) end
-    self._touchEvent = nil
-    Text.Destroy(self)
 end
 
 return TextInput
