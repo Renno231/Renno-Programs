@@ -2,7 +2,7 @@ local gpu = require("component").gpu
 local wrap = require("yawl-e.util").wrap
 --=============================================================================
 
-local txtAlignments = {
+local txtOffsets = {
     ["top left"] = {-1,-1},
     ["top center"] = {0,-1},
     ["top right"] = {1,-1},
@@ -31,13 +31,13 @@ local Text = require('libClass2')(Widget)
 ---@param foregroundColor number
 ---@return Text
 function Text:new(parent, x, y, text, foregroundColor)
-    local o = self.parent(parent, x, y)
     checkArg(1, parent, 'table')
     checkArg(2, x, 'number', 'table')
     checkArg(3, y, 'number', 'nil')
     checkArg(4, text, 'string')
     checkArg(5, foregroundColor, 'number', 'nil')
     if (type(x) == "table") then checkArg(3, y, 'nil') else checkArg(3, y, 'number') end
+    local o = self.parent(parent, x, y)
     setmetatable(o, {__index = self})
     ---@cast o Text
     o:text(text)
@@ -48,9 +48,16 @@ end
 
 ---@param value? string
 ---@return string
-function Text:text(value)
+function Text:text(...)
     local oldValue = self._text
-    if (value) then self._text = tostring(value) end
+    local values = {...}
+    if #values > 0 then 
+        local value = ""
+        for _,v in ipairs (values) do --table.concat bugs out sometimes
+            value = value .. " " .. tostring(v)
+        end
+        self._text = value
+    end
     return oldValue
 end
 
@@ -165,25 +172,31 @@ function Text:width(value)
     end
     return math.min(math.max(self:minWidth(), maxTextWidth), self:maxWidth())
 end
---[=[
+
 ---@param value? number
 ---@return number
-function Text:textAlignment(x,y) -- range from -1,-1 to 1,1 where 0,0 is the center, default is -1,-1
+--use string.format(), %-13s does left alignment with min width of 13, %+13s does right alignment with min width of 13
+function Text:textOffset(x,y) -- range from -1,-1 to 1,1 where 0,0 is the center, default is -1,-1
     checkArg(1, x, 'number', 'string', 'nil') --could make it a string so they can pass in the name of the alignment, e.g. "center" or "top left"
     checkArg(1, y, 'number', 'nil')
-    local oldValue = self._txtalignment
+    local oldValue = self._textoffset
     if type(x) == "string" and y == nil then
-        if txtAlignments[x] then
-            self._txtalignment = {x = txtAlignments[x][1], y = txtAlignments[x][2]}
+        if txtOffsets[x] then
+            self._textoffset = {x = txtOffsets[x][1], y = txtOffsets[x][2]}
         end
     elseif x and y then 
-        self._txtalignment = {x = x, y = y}
+        self._textoffset = {x = x, y = y}
     end
     if oldValue then
         oldValue = {x = oldValue.x, y = oldValue.y} --fresh table
     end
     return oldValue
-end]=]
+end
+
+function Text:textAlignment(xalignment, yalignment)
+    --left, center, or right
+    --top, middle, bottom
+end
 
 function Text:draw()
     if (not self:visible()) then return end
