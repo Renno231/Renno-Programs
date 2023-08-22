@@ -24,8 +24,24 @@ function Border:new(parent, x, y, borderset)
     o:borderSet(borderset)
     o:bordered(true)
     o:_borderOverride(true)
+    o:autoFit(true, true)
     ---@cast o Border
     return o
+end
+
+---@param value? boolean
+---@return boolean
+function Border:autoFit(widthval, heightval)
+    checkArg(1, widthval, 'boolean', 'nil')
+    checkArg(1, heightval, 'boolean', 'nil')
+    local oldValWidth, oldValHeight = self._autofitsWidth, self._autofitsHeight
+    if (widthval ~= nil) then
+        self._autofitsWidth = widthval
+    end
+    if (heightval ~= nil) then
+        self._autofitsHeight = heightval
+    end
+    return oldValWidth, oldValHeight
 end
 
 function Border:draw()
@@ -46,16 +62,28 @@ function Border:draw()
     if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
 
     --calculate tweens accordingly
-    local width, height = 2,2
-    for _, element in pairs(self._childs) do
-        element:_tweenStep()
-        --calcualte the Border dimensions and whatnot here after tweenstep
-        local distWidth = element:x() + element:width()
-        local distHeight = element:y() + element:height()
-        if distWidth > width then width = distWidth end
-        if distHeight > height then height = distHeight end 
+    local width, height = self:size()
+    local autoWidth, autoHeight = self:autoFit()
+    if autoWidth or autoHeight then
+        width, height = autoWidth and 2 or width, autoHeight and 2 or height
+        --probably need to do autoFitWidth() and autoFitHeight() individually or do something like self:autoFit(width, height) as booleans
+        for _, element in pairs(self._childs) do
+            element:_tweenStep()
+            --calcualte the Border dimensions and whatnot here after tweenstep
+            if element:visible() then
+                local distWidth = element:x() + element:width()
+                local distHeight = element:y() + element:height()
+                if autoWidth and distWidth > width then width = distWidth end
+                if autoHeight and distHeight > height then height = distHeight end 
+            end
+        end
+        if autoWidth then 
+            self:width(width)
+        end
+        if autoHeight then
+            self:height(height)
+        end
     end
-    self:size(width, height)
     --clean background
     if (self:backgroundColor()) then
         local oldBG = gpu.getBackground()
