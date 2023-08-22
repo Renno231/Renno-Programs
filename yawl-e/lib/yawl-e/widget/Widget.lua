@@ -12,6 +12,7 @@
 local Widget = require("libClass2")()
 local gpu = require("component").gpu
 local unicode = require("unicode")
+local event = require("event")
 
 function Widget:defaultCallback()
 end
@@ -22,8 +23,6 @@ end
 ---@return Widget
 ---@overload fun(self:Widget,parent:Frame,position:Position):Widget
 function Widget:new(parent, x, y)
-    local o = self.parent()
-    setmetatable(o, {__index = self})
     checkArg(1, parent, 'table', 'nil')
     checkArg(2, x, 'table', 'number')
     checkArg(3, y, 'number', 'nil')
@@ -32,11 +31,14 @@ function Widget:new(parent, x, y)
     else
         checkArg(3, y, 'nil')
     end
+    local o = self.parent()
+    setmetatable(o, {__index = self})
     ---@cast o Widget
     o._parentFrame = parent
     o._position = {x = 1, y = 1}
     o._size = {width = 1, height = 1}
     o._welds = {} --just for reference on doing cleanup
+    o._listeners = {}
     o:position(x, y)
     if (parent) then parent:addChild(o) end
     return o
@@ -264,6 +266,14 @@ end
 ---Set or get the screen event callback method for this Widget.
 ---```lua
 ---function callback(self,[...,],...signalData) end
+
+function Widget:closeListeners()
+    for _, id in pairs(self._listeners) do
+        if (type(id) == 'number') then event.cancel(id) end
+    end
+    return true
+end
+
 ---```
 ---@param callback? function
 ---@param ...? any
@@ -294,10 +304,12 @@ end
 function Widget:checkCollision(x, y)
     checkArg(1, x, 'number')
     checkArg(2, y, 'number')
-    if (x < self:absX()) then return false end
-    if (x > self:absX() + self:width() - 1) then return false end
-    if (y < self:absY()) then return false end
-    if (y > self:absY() + self:height() - 1) then return false end
+    local abx,aby =  self:absPosition()
+    local width,height = self:size()
+    if (x < abx ) then return false end
+    if (x > abx + width - 1) then return false end
+    if (y < aby) then return false end
+    if (y > aby + height - 1) then return false end
     return true
 end
 
@@ -346,12 +358,12 @@ function Widget:_tweenStep()
         local ox, oy = self._tweenPos.original.x, self._tweenPos.original.y
         local nx, ny = self._tweenPos.goal.x, self._tweenPos.goal.y --new
         local targetStep = 10
-        if self._tweenPos.step > targetStep then
+        if self._tweenPos.step > targetStep then --could check if its equal
             self._tweenPos = nil
             --could push a psuedo tweenPosFinished event here
         else
-            local speed = self._tweenPos.speed / 10
-            self:position(math.floor(ox + (nx - ox) * speed + 0.5), math.floor(oy + (ny - oy) * speed + 0.5 ) )
+            local t = self._tweenPos.step / 10
+            self:position(math.floor(ox + (nx - ox) * t + 0.5), math.floor(oy + (ny - oy) * t + 0.5 ) )
             self._tweenPos.step = self._tweenPos.step + 1
         end
     end
@@ -362,7 +374,7 @@ function Widget:_tweenStep()
         local targetStep = 10
         if self._tweenSize.step > targetStep then
             self._tweenSize = nil
-            self:size(nwidth, nheight) -- Set the final size to ensure accuracy, might not be necessary
+            --self:size(nwidth, nheight) -- Set the final size to ensure accuracy, might not be necessary
             --could push a psuedo tweenSizeFinished event here
         else
             local t = self._tweenSize.step / targetStep
@@ -373,6 +385,7 @@ function Widget:_tweenStep()
     end
 end
 
+--todo: add weldAlignment (changes where the weld is applied, for now its top left corner)
 function Widget:weld(weldedTo, x, y)
     checkArg(1, weldedTo, 'table', 'boolean')
     checkArg(1, x, 'number', 'nil')
@@ -395,17 +408,45 @@ function Widget:weld(weldedTo, x, y)
     return oldVal
 end
 
-function Widget:Destroy() --unparent and then .. ? 
+function Widget:reparent(newParent)
+    local parent = self:getParent()
+    if parent and newParent == false then parent:removeChild(self) end
+    if newParent then
+        self._parentFrame = newParent
+        newParent:addChild(self)
+    end
+end
 
+function Widget:breakWelds()
     self:weld(false) -- breaks its own weld
     for obj, _ in pairs (self._welds) do
         obj:weld(false) -- breaks any attached welds
     end
-    local parent = self:getParent()
-    if parent then parent:removeChild(self) end
+end
+
+function Widget:reset()
+    self:closeListeners()
+    self:breakWelds()
+    self._tweenPos = nil
+    self._tweenSize = nil
+end
+
+function Widget:Destroy(force) --unparent and then .. ? 
+    self:closeListeners()
+    if force and self._childs then
+        for _, element in pairs(self._childs) do
+            element:Destroy(force)
+        end    
+    end
+    self:breakWelds()
+    self:reparent()
     if self.clearChildren then --should frames destroy any child objects when being destroyed?
         self:clearChildren()
     end
+    for i,v in pairs (self) do --hmm..
+        rawset(self, i, nil)
+    end
+    setmetatable(self, {}) --should be fine
 end
 
 Widget.Borders = {}
