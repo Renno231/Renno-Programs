@@ -96,7 +96,7 @@ end
 ---@return number
 function Widget:absX()
     if (self._parentFrame) then
-        return self._parentFrame:absX() + self:x() - 1
+        return self._parentFrame:absX() + self:x() - 1 - (self._parentFrame.scrollX and self._parentFrame:scrollX() or 0) 
     else
         return self:x()
     end
@@ -106,7 +106,7 @@ end
 ---@return number
 function Widget:absY()
     if (self._parentFrame) then
-        return self._parentFrame:absY() + self:y() - 1
+        return self._parentFrame:absY() + self:y() - 1 - (self._parentFrame.scrollY and self._parentFrame:scrollY() or 0) 
     else
         return self:y()
     end
@@ -247,6 +247,7 @@ function Widget:drawBorder()
             if oldFG then gpu.setForeground(oldFG) end
         end
         gpu.setBackground(oldBG)
+        return true
     end
 end
 
