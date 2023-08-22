@@ -64,7 +64,7 @@ function Border:draw()
     --calculate tweens accordingly
     local width, height = self:size()
     local autoWidth, autoHeight = self:autoFit()
-    if autoWidth or autoHeight then
+    if #self._childs>0 and autoWidth or autoHeight then
         width, height = autoWidth and 2 or width, autoHeight and 2 or height
         --probably need to do autoFitWidth() and autoFitHeight() individually or do something like self:autoFit(width, height) as booleans
         for _, element in pairs(self._childs) do
