@@ -56,16 +56,15 @@ function Frame:new(parentFrame, x, y)
     setmetatable(o, {__index = self})
     ---@cast o Frame
     o._childs = {}
-    o._listeners = {}
     local w, h = gpu.getViewport()
     o:size(w - o:x() + 1, h - o:y() + 1)
     o._lastTouch = {x = 0, y = 0, t = 0}
     if (not parentFrame) then
-        table.insert(o._listeners, event.listen("touch", function(...) o:_touchHandler(...) end))
-        table.insert(o._listeners, event.listen("drag", function(...) o:propagateEvent(...) end))
-        table.insert(o._listeners, event.listen("drop", function(...) o:propagateEvent(...) end))
-        table.insert(o._listeners, event.listen("scroll", function(...) o:propagateEvent(...) end))
-        table.insert(o._listeners, event.listen("walk", function(...) o:propagateEvent(...) end))
+        o._listeners.touch =  event.listen("touch",  function(...) o:_touchHandler(...)  end)
+        o._listeners.drag =   event.listen("drag",   function(...) o:propagateEvent(...) end)
+        o._listeners.drop =   event.listen("drop",   function(...) o:propagateEvent(...) end)
+        o._listeners.scroll = event.listen("scroll", function(...) o:propagateEvent(...) end)
+        o._listeners.walk =   event.listen("walk",   function(...) o:propagateEvent(...) end)
     end
     return o
 end
@@ -80,12 +79,6 @@ function Frame:_touchHandler(eName, screenAddress, x, y, ...)
         end
     end
     self._lastTouch = {x = x, y = y, t = cTime}
-end
-
-function Frame:closeListeners()
-    for _, id in pairs(self._listeners) do
-        if (type(id) == 'number') then event.cancel(id) end
-    end
 end
 
 ---Add a widget container to the container
@@ -217,5 +210,5 @@ end
 ---Should the fix for bitBlt be used. Only apply to old OC versions.
 Frame._bitBltFix = bitBltFix
 
-
+--frame :Destroy should be quite aggressive I think, or at least be optionally aggressive in the sense that it destroys all of the child objects too instead of just unlinking them
 return Frame
