@@ -51,11 +51,11 @@ end
 function Text:text(...)
     local oldValue = self._text
     local values = {...}
-    if #values > 0 then 
-        local value = ""
-        for _,v in ipairs (values) do --table.concat bugs out sometimes
-            value = value .. " " .. tostring(v)
+    if #values > 0 then
+        for i,v in ipairs (values) do --table.concat bugs out sometimes
+            values[i] = tostring(v)
         end
+        local value = table.concat(values, " ")    
         self._text = value
     end
     return oldValue
