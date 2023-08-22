@@ -127,7 +127,7 @@ function DropdownList:draw()
     gpu.fill(x, y, width, height, " ") --overwrite the background
     local list = self._list
     if not list then return end
-    list:position(x, y+1)
+    list:position(self:x(), self:y()+1)
     list:width(width)
     local listValue = tostring(list._list[list:getSelection()[1]] or "")
     if not listValue then return end
