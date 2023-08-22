@@ -387,10 +387,10 @@ function Widget:_tweenStep()
 end
 
 --todo: add weldAlignment (changes where the weld is applied, for now its top left corner)
-function Widget:weld(weldedTo, x, y)
-    checkArg(1, weldedTo, 'table', 'boolean')
-    checkArg(1, x, 'number', 'nil')
-    checkArg(1, y, 'number', 'nil')
+function Widget:weld(weldedTo, x, y) --could make x and y into functions that return a number?
+    checkArg(1, weldedTo, 'table', 'boolean', 'nil')
+    checkArg(1, x, 'function', 'number', 'nil')
+    checkArg(1, y, 'function', 'number', 'nil')
     
     local oldVal = self._weld
     if type(weldedTo)=="table" and weldedTo._welds and x and y then
@@ -407,6 +407,18 @@ function Widget:weld(weldedTo, x, y)
         oldVal = {weldedTo = oldVal.weldedTo, x = oldVal.x, y = oldVal.y} --fresh table, don't want to pass the original since its by reference
     end
     return oldVal
+end
+
+function Widget:_calculateWeld()
+    local weldData = self:weld()
+    local weldedTo = weldData and weldData.weldedTo
+    local weldedToParent = weldedTo and weldData.weldedTo.getParent and weldData.weldedTo:getParent()
+    if not weldData or not weldedToParent then return end
+    --if same parent, use :x() and :y(), if not, use absX() and absY() ?
+    local uselocal = weldedToParent == self:getParent()
+    local offx, offy = type(weldData.x) == "function" and (tonumber(weldData.x()) or 0) or weldData.x, type(weldData.y) == "function" and (tonumber(weldData.y()) or 0) or weldData.y
+    self:position(offx + (uselocal and weldedTo:x() or weldedTo:absX()), offy + (uselocal and weldedTo:y() or weldedTo:absY())) 
+    return true
 end
 
 function Widget:reparent(newParent)
