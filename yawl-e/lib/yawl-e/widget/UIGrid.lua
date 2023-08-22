@@ -11,14 +11,16 @@ local gpu = require("component").gpu
 
 --[[
     TODO
-        
+        finish grid logic
 ]]
 
 local UIGrid = class(Frame) 
 
 function UIGrid:addChild(containerChild)
     self._childData = self._childData or {}
-    self._childData[containerChild] = {containerChild:position(), containerChild:size()}
+    local x,y = containerChild:position()
+    local width, height =  containerChild:size()
+    self._childData[containerChild] = {x,y,width,height}
     table.insert(self._childs, containerChild)
 end
 
@@ -96,7 +98,7 @@ function UIGrid:_calculateGrid()
     local scrollx, scrolly = self:scrollX(), self:scrollY()
     local col, row = 1,1
     for _, child in ipairs (self._childs) do
-        --position absolutely, size as needed
+        --probably need some logic for welds
         if row > rowmax then
             child:visible(false)
         else
@@ -119,10 +121,6 @@ end
 
 function UIGrid:draw()
     if not self:visible() then return end
-    --[[
-        draw like typical frame
-        not too sure how to do the positioning
-        check tween size stuff and math.min() it if its out of the cellsize
-    ]]
+    
     return true
 end
