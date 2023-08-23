@@ -194,9 +194,15 @@ function Frame:draw()
     if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
     self:_tweenStep()
     --draw widgets
+    --tween all children first, then calculate welds on all children, and THEN draw the children and border, otherwise order of _childs table interferes with welds
+    --only bad part is that it triples the iteration of _childs
     for _, element in pairs(self._childs) do
         element:_tweenStep()
+    end
+    for _, element in pairs(self._childs) do
         element:_calculateWeld()
+    end
+    for _, element in pairs(self._childs) do
         if element:draw() and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end
