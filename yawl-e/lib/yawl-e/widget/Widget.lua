@@ -96,7 +96,7 @@ end
 ---@return number
 function Widget:absX()
     if (self._parentFrame) then
-        return self._parentFrame:absX() + self:x() - 1 - (self._parentFrame.scrollX and self._parentFrame:scrollX() or 0) 
+        return self._parentFrame:absX() + self:x() - 1 - (self._parentFrame.scrollX and math.floor(0.5+ self._parentFrame:scrollX()) or 0) 
     else
         return self:x()
     end
@@ -106,7 +106,7 @@ end
 ---@return number
 function Widget:absY()
     if (self._parentFrame) then
-        return self._parentFrame:absY() + self:y() - 1 - (self._parentFrame.scrollY and self._parentFrame:scrollY() or 0) 
+        return self._parentFrame:absY() + self:y() - 1 - (self._parentFrame.scrollY and math.floor(0.5+ self._parentFrame:scrollY()) or 0) 
     else
         return self:y()
     end
@@ -387,6 +387,7 @@ function Widget:_tweenStep()
 end
 
 --todo: add weldAlignment (changes where the weld is applied, for now its top left corner)
+-- might also need to disallow or break existing welds if theres ever a circular reference ?
 function Widget:weld(weldedTo, x, y) --could make x and y into functions that return a number?
     checkArg(1, weldedTo, 'table', 'boolean', 'nil')
     checkArg(1, x, 'function', 'number', 'nil')
