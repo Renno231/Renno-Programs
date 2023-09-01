@@ -132,6 +132,8 @@ function Window:defaultCallback(_, eventName, uuid, x, y, button, playerName) --
         require("component").ocelot.log(string.format("%s %s %s %s (%s)", hitbox, tab, x,y, str))]]
         if tab then --need to account for border?
             self:selectTab(tab._name)
+        elseif not self:bordered() and hitbox then 
+            return
         end
         return true
     end
