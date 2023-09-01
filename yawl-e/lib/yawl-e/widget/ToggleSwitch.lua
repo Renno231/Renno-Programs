@@ -42,6 +42,7 @@ end
 function ToggleSwitch:defaultCallback(_, eventName)
     if (eventName == "touch") then
         self:toggle()
+        return true
     end
 end
 
@@ -96,16 +97,16 @@ function ToggleSwitch:draw()
     local boundary = math.max(math.min(self:width() - self._slider.width, sliderX + step), 0)
     local oldBG = gpu.getBackground()
     gpu.setBackground(self:backgroundColor())
-    gpu.fill(x, y, self:width(), self:height(), " ")
+    self:_gpufill(x, y, self:width(), self:height(), " ")
     gpu.setBackground(self._slider.backgroundColor)
-    gpu.fill(x + boundary, y, self._slider.width, self._slider.height, " ")
+    self:_gpufill(x + boundary, y, self._slider.width, self._slider.height, " ")
     if boundary ~= sliderX then
         self._slider.x = boundary
     end
     local activeBG = self:activeBackgroundColor()
     if activeBG and boundary - 1 > 0 then
         gpu.setBackground(activeBG)
-        gpu.fill(x, y, boundary, self:height(), " ")
+        self:_gpufill(x, y, boundary, self:height(), " ")
     end
     gpu.setBackground(oldBG)
     return true

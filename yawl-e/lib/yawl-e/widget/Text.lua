@@ -55,8 +55,7 @@ function Text:text(...)
         for i,v in ipairs (values) do --table.concat bugs out sometimes
             values[i] = tostring(v)
         end
-        local value = table.concat(values, " ")    
-        self._text = value
+        self._text = table.concat(values, " ")  
     end
     return oldValue
 end
@@ -204,7 +203,7 @@ function Text:draw()
     local oldBgColor = gpu.getBackground()
     if (self:backgroundColor()) then
         gpu.setBackground(self:backgroundColor())
-        gpu.fill(self:absX(), self:absY(), self:width(), self:height(), " ")
+        self:_gpufill(self:absX(), self:absY(), self:width(), self:height(), " ")
     end
     local y = self:absY()
     self._parsedText = wrap(self:text(), self:maxWidth())
@@ -219,7 +218,7 @@ function Text:draw()
                 local s, _, _, bg = pcall(gpu.get, x, y)
                 if (s ~= false) then
                     gpu.setBackground(bg)
-                    gpu.set(x, y, c)
+                    self:_gpuset(x, y, c)
                     x = x + 1
                 end
             end

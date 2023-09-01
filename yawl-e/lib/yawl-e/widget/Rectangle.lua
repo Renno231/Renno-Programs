@@ -24,7 +24,6 @@ function Rectangle:new(parent, x, y, width, height, backgroundColor)
     checkArg(6, backgroundColor, 'number')
     local o = self.parent(parent, x, y)
     setmetatable(o, {__index = self})
-    o._size = {width = 1, height = 1}
     ---@cast o Rectangle
     o:size(width, height)
     o:backgroundColor(backgroundColor or 0)
@@ -35,7 +34,7 @@ end
 function Rectangle:draw()
     if (not self:visible()) then return end
     local bk = gpu.setBackground(self:backgroundColor())
-    gpu.fill(self:absX(), self:absY(), self:width(), self:height(), " ")
+    self:_gpufill(self:absX(), self:absY(), self:width(), self:height(), " ")
     gpu.setBackground(bk)
     return true
 end

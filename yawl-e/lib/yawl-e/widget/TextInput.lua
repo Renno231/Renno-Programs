@@ -37,9 +37,10 @@ function TextInput:_onKeyDown(eventName, component, char, key, player)
     elseif (char == 13 and not self:multilines()) then --return
         event.cancel(self._listeners.keyDownEvent)
         self._listeners.keyDownEvent = nil
+        self._player = nil
         event.cancel(self._listeners.touchEvent)
         self._listeners.touchEvent = nil
-    elseif (char ~= 0) then
+    elseif char>=32 and char<=126 then --normal characters
         self:text(self:text() .. string.char(char))
     end
 end
@@ -60,17 +61,25 @@ function TextInput:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     if (eventName ~= "touch") then return end
     if button ~= 0 then self:text("") end
     if button == 0 and (not self._listeners.keyDownEvent) then
-        self._listeners.keyDownEvent = event.listen("key_down", function(...) self:_onKeyDown(...) end) --[[@as number]]
+        self._listeners.keyDownEvent = event.listen("key_down", function(...) 
+            local _, screen, _, _, plr = ...
+            if not self._player then self._player = plr end
+            if self._player == plr then
+                self:_onKeyDown(...) 
+            end
+        end) --[[@as number]]
         self._listeners.touchEvent = event.listen("touch", function(eventName, uuid, x, y, button, playerName)
             if (not self:checkCollision(x, y)) then
                 if (self._listeners.keyDownEvent) then event.cancel(self._listeners.keyDownEvent --[[@as number]]) end
                 self._listeners.keyDownEvent = nil
+                self._player = nil
                 if (self._listeners.touchEvent) then event.cancel(self._listeners.touchEvent --[[@as number]]) end
                 self._listeners.touchEvent = nil
                 if self:clearOnEnter() then self:text("") end
             end
         end) --[[@as number]]
     end
+    return true
 end
 
 ---@param value? boolean
@@ -118,7 +127,7 @@ function TextInput:draw()
     local oldBgColor = gpu.getBackground()
     if (self:backgroundColor()) then
         gpu.setBackground(self:backgroundColor())
-        gpu.fill(self:absX(), self:absY(), self:width(), self:height(), " ")
+        self:_gpufill(self:absX(), self:absY(), self:width(), self:height(), " ")
     end
     local y, maxWidth = self:absY(), self:maxWidth()
     for i, line in ipairs(wrap(self:text(), maxWidth)) do
@@ -132,7 +141,7 @@ function TextInput:draw()
                 local s, _, _, bg = pcall(gpu.get, x, y)
                 if (s ~= false) then
                     gpu.setBackground(bg)
-                    gpu.set(x, y, self:placeholder() or c)
+                    self:_gpuset(x, y, self:placeholder() or c)
                     x = x + 1
                 end
             end
