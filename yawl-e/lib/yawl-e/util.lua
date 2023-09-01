@@ -89,4 +89,43 @@ function utils.formatNumberShort(number)
     return formattedNumber .. units[currentUnit]
 end
 
+local Tab = {} --designed to be used in Window widget
+Tab.__index = Tab
+
+function Tab:new(parent, name, x, y)
+    checkArg(1, parent, 'table')
+    checkArg(2, name, 'string')
+    checkArg(3, x, 'number')
+    checkArg(4, y, 'number')
+    local o = {}
+    setmetatable(o, self)
+    
+    o.removeChild = parent.removeChild
+    o._childs = {}
+    o._parent = parent
+    o._name = name
+    o._displayName = name
+    o._tabX = x
+    o._tabY = y
+    o._scrollX, o._scrollY = 0, 0 
+    o._lastSelected = 0
+    return o
+end
+--{_childs = {}, parent = somewindow, displayName = string, tabX = num, tabY = num, scrollX = num, scrollY = num,  }
+function Tab:addChild(child) 
+    table.insert(self._childs, child)
+    child:setParent(self._parent, false) 
+end
+
+function Tab:displayName(text)
+    checkArg(1, text, 'function', 'string', 'nil')
+    local oldValue = self._displayName --type(self._displayName) == 'function' and self._displayName() or self._displayName
+    if text~=nil then
+        self._displayName = text
+    end
+    return oldValue
+end
+
+utils.Tab = Tab
+    
 return utils
