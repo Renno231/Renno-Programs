@@ -59,6 +59,7 @@ function Frame:new(parentFrame, x, y)
     local w, h = gpu.getViewport()
     o:size(w - o:x() + 1, h - o:y() + 1)
     o._lastTouch = {x = 0, y = 0, t = 0}
+    o._weldCount = 0
     if (not parentFrame) then
         o._listeners.touch =  event.listen("touch",  function(...) o:_touchHandler(...)  end)
         o._listeners.drag =   event.listen("drag",   function(...) o:propagateEvent(...) end)
@@ -109,19 +110,24 @@ end
 
 function Frame:propagateEvent(eName, screenAddress, x, y, ...)
     if (not self:enabled()) then return end
-    --TODO : sort child by z, making sure to keep the original order in a new table
-    --TODO : reverse the sort
-    for _, w in pairs(self._childs) do
+    table.sort(self._childs, function(a, b) return a:z() < b:z() end)
+    for i = #(self._childs), 1, -1 do
+        local w = self._childs[i]
         --TODO : find a new yeilding methods
         --os.sleep()
         if (w:checkCollision(x, y)) then
             if (w:instanceOf(Frame)) then
                 ---@cast w Frame
-                w:propagateEvent(eName, screenAddress, x, y, ...)
-                --TODO : return true if returned true
+                --frame needs callback first, if not return true then propagate downward
+                if w:invokeCallback(eName, screenAddress, x, y, ...) == true then
+                    return true
+                elseif (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
+                    return true
+                end
+            else    
+                w:invokeCallback(eName, screenAddress, x, y, ...)
             end
-            w:invokeCallback(eName, screenAddress, x, y, ...)
-            --TODO : return true
+            return true
         end
     end
 end
@@ -140,16 +146,17 @@ end
 ---@return number defaultBuffer,number newBuffer
 function Frame:_initBuffer()
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    local rwidth, rheight = gpu.getResolution()
     local defaultBuffer = gpu.getActiveBuffer()
-    local success, newBuffer = pcall(gpu.allocateBuffer, gpu.getResolution())
-    --local success, newBuffer = nil, nil
-    if success then
-        defaultBuffer = gpu.setActiveBuffer(newBuffer)
+    local newBuffer, reason = gpu.allocateBuffer(rwidth, rheight)
+
+    if newBuffer then
+        defaultBuffer = gpu.setActiveBuffer(newBuffer) --means default buffer will always be the last one
     end
 
     if (newBuffer and newBuffer ~= defaultBuffer) then
         --copy the old buffer in the new buffer for transparancy effect
-        gpu.bitblt(newBuffer, x, y, width, height, newBuffer, bitBltFix and y or x, bitBltFix and x or y)
+        gpu.bitblt(newBuffer, x, y, width, height, defaultBuffer, bitBltFix and y or x, bitBltFix and x or y)
     end
     return defaultBuffer, newBuffer
 end
@@ -166,10 +173,21 @@ function Frame:_restoreBuffer(defaultBuffer, newBuffer)
     end
 end
 
+function Frame:_sort()
+    local unsorted = false
+    for i, w in pairs(self._childs) do
+        if i> 1 and (self._childs[i - 1]:z() > w:z()) then
+            unsorted = true
+            break
+        end
+    end
+    if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
+end
+
 ---Draw the widgets in the container
 function Frame:draw()
-    if (not self:visible()) then return end
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    if (not self:visible()) or x==nil or y == nil or width == nil or height == nil then return end
     --init frame buffer
     local defaultBuffer, newBuffer = self:_initBuffer()
 
@@ -177,32 +195,24 @@ function Frame:draw()
     if (self:backgroundColor()) then
         local oldBG = gpu.getBackground()
         gpu.setBackground(self:backgroundColor() --[[@as number]])
-        gpu.fill(x, y, width, height, " ")
+        self:_gpufill(x, y, width, height, " ")
         gpu.setBackground(oldBG)
     end
-
+    if not self._childs then return false end
+    if #self._childs == 0 then return end
     --sort widgets by z
-    local unsorted = false
-    for i, w in pairs(self._childs) do
-        if (i > 1) then
-            if (self._childs[i - 1]:z() > w:z()) then
-                unsorted = true
-                break
-            end
-        end
-    end
-    if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
+    self:_sort()
     self:_tweenStep()
     --draw widgets
-    --tween all children first, then calculate welds on all children, and THEN draw the children and border, otherwise order of _childs table interferes with welds
-    --only bad part is that it triples the iteration of _childs
-    for _, element in pairs(self._childs) do
-        element:_tweenStep()
+    local hasWelds = self._weldCount > 0
+    local tweenOrWeld = hasWelds and "_calculateWeld" or "_tweenStep"
+    if hasWelds then
+        for _, element in pairs(self._childs) do
+            element:_tweenStep()
+        end
     end
     for _, element in pairs(self._childs) do
-        element:_calculateWeld()
-    end
-    for _, element in pairs(self._childs) do
+        element[tweenOrWeld](element)
         if element:draw() and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end
