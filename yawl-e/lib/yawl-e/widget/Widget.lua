@@ -35,16 +35,43 @@ function Widget:new(parent, x, y)
     setmetatable(o, {__index = self})
     ---@cast o Widget
     o._parentFrame = parent
-    o._position = {x = 1, y = 1}
+    o._position = {x = x, y = y, z = 0}
     o._size = {width = 1, height = 1}
     o._welds = {} --just for reference on doing cleanup
     o._listeners = {}
-    o:position(x, y)
+    
     if (parent) then parent:addChild(o) end
     return o
 end
 
 function Widget:getParent() return self._parentFrame end
+
+function Widget:setParent(newparent, shouldClean) --kinda dangerous
+    checkArg(1, newparent, 'table', 'nil') --how is this erroring when passing nil?
+    checkArg(2, shouldClean, 'boolean', 'nil')
+    
+    local parent = self:getParent()
+    shouldClean = shouldClean or shouldClean==nil
+    if shouldClean and parent and parent.removeChild then 
+        parent:removeChild(self) 
+    end
+    self._parentFrame = newparent
+    if newparent~=nil and shouldClean then
+        newparent:addChild(self)
+    end
+end
+--[[
+--adds a lot of complexity, may not be worth it
+function Widget:reparent(newParent)
+    local parent = self:getParent()
+    if parent and newParent and newParent~=parent then 
+        parent:removeChild(self) 
+    end
+    if newParent then
+        self:setParent(newParent)
+        newParent:addChild(self)
+    end
+end]]
 
 ---Set the Widget's position.
 ---@param x number
@@ -232,16 +259,16 @@ function Widget:drawBorder()
             if oldFG then gpu.setForeground(self._foregroundColor) end
             local setLength = unicode.len(borderSet)
             if setLength > 3 then
-                gpu.set(x, y, unicode.charAt(borderSet, 1))                                         --topleft
-                gpu.set(x + width - 1, y, unicode.charAt(borderSet, 2))                             --topright
-                gpu.set(x, y + height - 1, unicode.charAt(borderSet, 3))                            --bottomleft
-                gpu.set(x + width - 1, y + height - 1, unicode.charAt(borderSet, 4))                --bottomright
+                self:_gpuset(x, y, unicode.charAt(borderSet, 1))                                         --topleft
+                self:_gpuset(x + width - 1, y, unicode.charAt(borderSet, 2))                             --topright
+                self:_gpuset(x, y + height - 1, unicode.charAt(borderSet, 3))                            --bottomleft
+                self:_gpuset(x + width - 1, y + height - 1, unicode.charAt(borderSet, 4))                --bottomright
                 if setLength > 4 then
-                    gpu.fill(x + 1, y, width - 2, 1, unicode.charAt(borderSet, 5))                  --top
+                    self:_gpufill(x + 1, y, width - 2, 1, unicode.charAt(borderSet, 5))                  --top
                     local isSix = setLength == 6
-                    gpu.fill(x + 1, y + height - 1, width - 2, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
-                    gpu.fill(x, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 7))             --left
-                    gpu.fill(x + width - 1, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 8)) -- right
+                    self:_gpufill(x + 1, y + height - 1, width - 2, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
+                    self:_gpufill(x, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 7))             --left
+                    self:_gpufill(x + width - 1, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 8)) -- right
                 end
             end
             if oldFG then gpu.setForeground(oldFG) end
@@ -314,6 +341,49 @@ function Widget:checkCollision(x, y)
     return true
 end
 
+function Widget:_gpuset(x, y, str) --should maybe do some checkArg here
+    local parent = self:getParent()
+    if parent then
+        if str == "" then return end
+        local px, py, pwidth, pheight = parent:absX(), parent:absY(), parent:width(), parent:height() 
+        if pwidth == 0 or pheight == 0 or x>px+pwidth-1 or y>py+pheight-1 or y<py then return end
+        local len = unicode.len(str)
+        if x<px then --str length stuff, not quite correct
+            str = unicode.sub(str, math.abs(px-x)+1)
+            x = px
+        elseif x+len > px+pwidth then
+            str = unicode.sub(str, 1, pwidth-(x-px))
+        end
+        if x <= 0 and x>=-len then --override undocumented native gpu edge case detection
+            str = unicode.sub(str, -x+2)
+        end
+    end
+    gpu.set(x,y,str)
+end
+
+function Widget:_gpufill(x, y, width, height, char)
+    local parent = self:getParent()
+    if parent then
+        local px, py, pwidth, pheight = parent:absX(), parent:absY(), parent:width(), parent:height() 
+        if pwidth == 0 or pheight == 0 or x>px+pwidth or y>py+pheight then return end
+        if x<px then --off to the left
+            width = width + (x-px)
+            x=px
+        end
+        if y<py then --off to the top
+            height = height + (y-py)
+            y=py --needs adjustment?
+        end
+        if x+width > px+pwidth then
+            width = pwidth-(x-px)
+        end
+        if y+height > py+pheight then
+            height = pheight-(y-py)
+        end
+    end
+    gpu.fill(x,y,width,height,char)
+end
+
 ---Draw the widgets in the container
 function Widget:draw()
     if (not self:visible()) then return end
@@ -323,8 +393,8 @@ end
 --size tween (linear)
 function Widget:tweenSize(width, height, speed)
     checkArg(1, width, 'number', 'nil')
-    checkArg(1, height, 'number', 'nil')
-    checkArg(1, speed, 'number', 'nil')
+    checkArg(2, height, 'number', 'nil')
+    checkArg(3, speed, 'number', 'nil')
     local goalWidth, goalHeight
     if self._tweenSize then
         goalWidth, goalHeight = self._tweenSize.goal.width, self._tweenSize.goal.height
@@ -338,14 +408,14 @@ end
 --position tween (linear)
 function Widget:tweenPosition(x, y, speed) --allow cancellation
     checkArg(1, x, 'number', 'nil')
-    checkArg(1, y, 'number', 'nil')
-    checkArg(1, speed, 'number', 'nil')
+    checkArg(2, y, 'number', 'nil')
+    checkArg(3, speed, 'number', 'nil')
     local goalX, goalY
     if self._tweenPos then
         goalX, goalY = self._tweenPos.goal.x, self._tweenPos.goal.y
     end
     if x and y then
-        self._tweenPos = {speed = math.min(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {x = x, y = y}, original = {x = self:x(), y = self:y()}} --maybe need to round if they are decimals
+        self._tweenPos = {speed = math.max(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {x = x, y = y}, original = {x = self:x(), y = self:y()}} --maybe need to round if they are decimals
     end
     return goalX, goalY
 end
@@ -358,12 +428,12 @@ function Widget:_tweenStep()
         --require("component").ocelot.log('got tweenPos table')
         local ox, oy = self._tweenPos.original.x, self._tweenPos.original.y
         local nx, ny = self._tweenPos.goal.x, self._tweenPos.goal.y --new
-        local targetStep = 10
+        local targetStep = self._tweenPos.speed
         if self._tweenPos.step > targetStep then --could check if its equal
             self._tweenPos = nil
             --could push a psuedo tweenPosFinished event here
         else
-            local t = self._tweenPos.step / 10
+            local t = self._tweenPos.step / targetStep
             self:position(math.floor(ox + (nx - ox) * t + 0.5), math.floor(oy + (ny - oy) * t + 0.5 ) )
             self._tweenPos.step = self._tweenPos.step + 1
         end
@@ -372,7 +442,7 @@ function Widget:_tweenStep()
         local owidth, oheight = self._tweenSize.original.width, self._tweenSize.original.height
         local nwidth, nheight = self._tweenSize.goal.width, self._tweenSize.goal.height
     
-        local targetStep = 10
+        local targetStep = self._tweenPos.speed
         if self._tweenSize.step > targetStep then
             self._tweenSize = nil
             --self:size(nwidth, nheight) -- Set the final size to ensure accuracy, might not be necessary
@@ -390,18 +460,27 @@ end
 -- might also need to disallow or break existing welds if theres ever a circular reference ?
 function Widget:weld(weldedTo, x, y) --could make x and y into functions that return a number?
     checkArg(1, weldedTo, 'table', 'boolean', 'nil')
-    checkArg(1, x, 'function', 'number', 'nil')
-    checkArg(1, y, 'function', 'number', 'nil')
-    
+    checkArg(2, x, 'function', 'number', 'nil')
+    checkArg(3, y, 'function', 'number', 'nil')
+    local currentWeldedTo = self._weld and self._weld.weldedTo
     local oldVal = self._weld
     if type(weldedTo)=="table" and weldedTo._welds and x and y then
-        if self._weld then
-            self._weld.weldedTo._welds[self] = nil --break and old welds
+        if currentWeldedTo then
+            if currentWeldedTo._parentFrame then
+                currentWeldedTo._parentFrame._weldCount = currentWeldedTo._parentFrame._weldCount - 1
+            end 
+            currentWeldedTo._welds[self] = nil --break and old welds
         end
         self._weld = {weldedTo = weldedTo, x = x, y = y}
         weldedTo._welds[self] = true 
+        if weldedTo._parentFrame then
+            weldedTo._parentFrame._weldCount = weldedTo._parentFrame._weldCount + 1
+        end 
     elseif weldedTo == false and self._weld then
-        self._weld.weldedTo._welds[self] = nil -- breaks the reference
+        if currentWeldedTo._parentFrame then
+            currentWeldedTo._parentFrame._weldCount = currentWeldedTo._parentFrame._weldCount - 1
+        end 
+        currentWeldedTo._welds[self] = nil -- breaks the reference
         self._weld = nil
     end
     if oldVal then
@@ -420,15 +499,6 @@ function Widget:_calculateWeld()
     local offx, offy = type(weldData.x) == "function" and (tonumber(weldData.x()) or 0) or weldData.x, type(weldData.y) == "function" and (tonumber(weldData.y()) or 0) or weldData.y
     self:position(offx + (uselocal and weldedTo:x() or weldedTo:absX()), offy + (uselocal and weldedTo:y() or weldedTo:absY())) 
     return true
-end
-
-function Widget:reparent(newParent)
-    local parent = self:getParent()
-    if parent and newParent == false then parent:removeChild(self) end
-    if newParent then
-        self._parentFrame = newParent
-        newParent:addChild(self)
-    end
 end
 
 function Widget:breakWelds()
@@ -453,11 +523,12 @@ function Widget:Destroy(force) --unparent and then .. ?
         end    
     end
     self:breakWelds()
-    self:reparent()
+    self:setParent(nil, nil)
     if self.clearChildren then --should frames destroy any child objects when being destroyed?
         self:clearChildren()
     end
-    for i,v in pairs (self) do --hmm..
+    for i, v in pairs (self) do --hmm..
+        --if type(v) == "table" and v.Destroy then v:Destroy() end
         rawset(self, i, nil)
     end
     setmetatable(self, {}) --should be fine
