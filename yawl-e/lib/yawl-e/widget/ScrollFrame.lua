@@ -16,24 +16,5 @@ function ScrollFrame:scrollY(num)
     if (num) then self._scrollindexY = (self._scrollindexY or oldValue) + num end
     return oldValue
 end
---[[
----@return number
-function ScrollFrame:absX()
-    if (self._parentFrame) then
-        return self._parentFrame:absX() + self:x() - 1 + self:scrollX()
-    else
-        return self:x()
-    end
-end
 
----Get the absolute y position on screen.
----@return number
-function ScrollFrame:absY()
-    if (self._parentFrame) then
-        return self._parentFrame:absY() + self:y() - 1 + self:scrollY()
-    else
-        return self:y()
-    end
-end
-]]
 return ScrollFrame
