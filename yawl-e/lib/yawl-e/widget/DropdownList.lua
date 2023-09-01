@@ -104,6 +104,7 @@ function DropdownList:defaultCallback(_, eventName, uuid, x, y, button, playerNa
         else
             self:toggle()
         end
+        return true
         --maybe add one for scroll that scrolls the list selection up/down by 1
     end
 end
@@ -126,7 +127,7 @@ function DropdownList:draw()
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     if newBG then gpu.setBackground(newBG) end
     if newFG then gpu.setForeground(newFG) end
-    gpu.fill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ") --overwrite the background
     local list = self._list
     if not list then return end
     list:width(width)
@@ -143,7 +144,7 @@ function DropdownList:draw()
     if charset then
         listValue = (unicode.charAt(charset, self:drop() and 2 or 1)) .. " " .. listValue
     end
-    gpu.set(x, y, unicode.sub(listValue, 1, width) ) --do the formatting here
+    self:_gpuset(x, y, unicode.sub(listValue, 1, width) ) --do the formatting here
 
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
