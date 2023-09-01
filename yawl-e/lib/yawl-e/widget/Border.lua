@@ -50,28 +50,22 @@ function Border:draw()
     local defaultBuffer, newBuffer = self:_initBuffer()
     
     --sort widgets by z
-    local unsorted = false
-    for i, w in pairs(self._childs) do
-        if (i > 1) then
-            if (self._childs[i - 1]:z() > w:z()) then
-                unsorted = true
-                break
-            end
-        end
-    end
-    if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
+    self:_sort()
 
     --calculate tweens accordingly
     local width, height = self:size()
     local autoWidth, autoHeight = self:autoFit()
     if #self._childs>0 and autoWidth or autoHeight then
         width, height = autoWidth and 2 or width, autoHeight and 2 or height
-        --probably need to do autoFitWidth() and autoFitHeight() individually or do something like self:autoFit(width, height) as booleans
-        for _, element in pairs(self._childs) do
-            element:_tweenStep()
+        local hasWelds = self._weldCount > 0
+        local tweenOrWeld = hasWelds and "_calculateWeld" or "_tweenStep"
+        if hasWelds then
+            for _, element in pairs(self._childs) do
+                element:_tweenStep()
+            end
         end
         for _, element in pairs(self._childs) do
-            element:_calculateWeld()
+            element[tweenOrWeld](element)
             --calcualte the Border dimensions and whatnot here after tweenstep
             if element:visible() then
                 local distWidth = element:x() + element:width()
@@ -80,6 +74,7 @@ function Border:draw()
                 if autoHeight and distHeight > height then height = distHeight end 
             end
         end
+            
         if autoWidth then 
             self:width(width)
         end
@@ -91,7 +86,7 @@ function Border:draw()
     if (self:backgroundColor()) then
         local oldBG = gpu.getBackground()
         gpu.setBackground(self:backgroundColor() --[[@as number]])
-        gpu.fill(x, y, width, height, " ")
+        self:_gpufill(x, y, width, height, " ")
         gpu.setBackground(oldBG)
     end
     --draw the children widgets after wiping background
