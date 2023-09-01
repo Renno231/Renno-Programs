@@ -400,7 +400,7 @@ function Widget:tweenSize(width, height, speed)
         goalWidth, goalHeight = self._tweenSize.goal.width, self._tweenSize.goal.height
     end
     if width and height then
-        self._tweenSize = {speed = math.min(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {width = width, height = height}, original = {width = self:width(), height = self:height()}}
+        self._tweenSize = {speed = math.max(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {width = width, height = height}, original = {width = self:width(), height = self:height()}}
     end
     return goalWidth, goalHeight
 end
@@ -425,7 +425,6 @@ function Widget:_tweenStep()
     --could add looping and total iterations, the ability to replay and the ability to pause
     --could also add bezier lerps
     if self._tweenPos then
-        --require("component").ocelot.log('got tweenPos table')
         local ox, oy = self._tweenPos.original.x, self._tweenPos.original.y
         local nx, ny = self._tweenPos.goal.x, self._tweenPos.goal.y --new
         local targetStep = self._tweenPos.speed
@@ -442,7 +441,7 @@ function Widget:_tweenStep()
         local owidth, oheight = self._tweenSize.original.width, self._tweenSize.original.height
         local nwidth, nheight = self._tweenSize.goal.width, self._tweenSize.goal.height
     
-        local targetStep = self._tweenPos.speed
+        local targetStep = self._tweenSize.speed
         if self._tweenSize.step > targetStep then
             self._tweenSize = nil
             --self:size(nwidth, nheight) -- Set the final size to ensure accuracy, might not be necessary
