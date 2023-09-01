@@ -202,7 +202,8 @@ function Frame:draw()
     if #self._childs == 0 then return end
     --sort widgets by z
     self:_sort()
-    self:_tweenStep()
+    local isRoot = self:getParent() == nil
+    if isRoot then self:_tweenStep() end
     --draw widgets
     local hasWelds = self._weldCount > 0
     local tweenOrWeld = hasWelds and "_calculateWeld" or "_tweenStep"
@@ -217,7 +218,7 @@ function Frame:draw()
             element:drawBorder() 
         end
     end
-    if self.drawBorder and not self._borderoverride then self:drawBorder() end
+    if isRoot and self.drawBorder and not self._borderoverride then self:drawBorder() end
     --might need to call self:drawBorder() like for the elements ^
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)

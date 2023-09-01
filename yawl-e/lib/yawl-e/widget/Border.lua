@@ -51,7 +51,8 @@ function Border:draw()
     
     --sort widgets by z
     self:_sort()
-
+    local isRoot = self:getParent() == nil
+    if isRoot then self:_tweenStep() end
     --calculate tweens accordingly
     local width, height = self:size()
     local autoWidth, autoHeight = self:autoFit()
@@ -94,7 +95,7 @@ function Border:draw()
         if element:draw() and element.drawBorder and not element._borderoverride then element:drawBorder() end
     end
     --draw the border
-    if self.drawBorder and self:bordered() then self:drawBorder() end
+    if isRoot and self.drawBorder and self:bordered() then self:drawBorder() end
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
     return true
