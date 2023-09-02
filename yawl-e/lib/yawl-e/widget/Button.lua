@@ -9,6 +9,7 @@ local Button = require('libClass2')(Rectangle)
 function Button:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     if eventName ~= "touch" then return end
     if self:shouldReset() then self:activate(true) else self:activate(not self:activate()) end
+    return true
 end
 
 function Button:activate(state)
@@ -46,7 +47,7 @@ function Button:draw()
     end
     local newBG = isActive and (self:foregroundColor() or 0xffffff-self:backgroundColor()) or self:backgroundColor()
     local oldBG = gpu.setBackground(newBG)
-    gpu.fill(self:absX(), self:absY(), self:width(), self:height(), " ")
+    self:_gpufill(self:absX(), self:absY(), self:width(), self:height(), " ")
     gpu.setBackground(oldBG)
     return true
 end

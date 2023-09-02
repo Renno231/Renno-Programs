@@ -90,6 +90,7 @@ function SliderBar:defaultCallback(_, eventName, _, x)
     local c, d = self:range()
     --math.round = function(a) return math.floor(a+0.5) end
     self:value(math.floor((c + ((d - c) / (b - a)) * (t - a)) + 0.5))
+    return true
 end
 
 function SliderBar:draw()
@@ -101,14 +102,14 @@ function SliderBar:draw()
     if newBG then
         gpu.setBackground(newBG)
     end
-    gpu.fill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ") --overwrite the background
     if newFG then gpu.setForeground(newFG) end
-    gpu.fill(x, y + math.ceil(height / 2) - 1, width, 1, "━")
+    self:_gpufill(x, y + math.ceil(height / 2) - 1, width, 1, "━")
     --gpu.setBackground(self._slider.backgroundColor) --maybe
     --TODO : slider width
     if value then
         local percent = math.floor(((width - 1) * (value / (self:max() - self:min()))))
-        gpu.fill(x + percent, y, 1, height, " ") --might make funny tall slider
+        self:_gpufill(x + percent, y, 1, height, " ") --might make funny tall slider
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)

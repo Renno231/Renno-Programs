@@ -10,7 +10,7 @@ local gpu = require("component").gpu
 ---@operator call:Histogram
 ---@overload fun(parent:Frame,x:number,y:number):Histogram
 ---@overload fun(parent:Frame,x:number,y:number,maxColumns:number):Histogram
-local Histogram = class(Frame)
+local Histogram = class(Frame) --I think this can actually be Widget
 
 ---Comment
 ---@return Histogram
@@ -57,7 +57,7 @@ function Histogram:adjust(value, index)
     checkArg(1, index, 'number', 'nil')
     checkArg(1, value, 'number')
     index = index or #self._data --if no chosen index, change the last
-    local oldValue = self._data[index]
+    local oldValue = self._data[index] or 0
     self._data[index] = oldValue + value
     return oldValue
 end
@@ -155,7 +155,7 @@ function Histogram:draw()
             local pixelHeight = math.min(math.floor((value / maxValue) * height), height)
             if value < min then min = value end
             if value > max then max = value end
-            gpu.fill(xOffset - i, yOffset - pixelHeight, 1, pixelHeight, fillChar)
+            self:_gpufill(xOffset - i, yOffset - pixelHeight, 1, pixelHeight, fillChar)
             mean = mean + value
         end
     end
@@ -163,8 +163,8 @@ function Histogram:draw()
     if headlineFunc then
         if txtFgColor then gpu.setForeground(txtFgColor) end
         local headline, divider = headlineFunc(self:label(), width, min, max, maxValue, mean)
-        gpu.set(x, y, headline or "Headline missing!")
-        gpu.set(x, y + 1, divider or string.rep("─", width))
+        self:_gpuset(x, y, headline or "Headline missing!")
+        self:_gpuset(x, y + 1, divider or string.rep("─", width))
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)

@@ -48,7 +48,7 @@ end
 
 function SortedList:value(index, newval) --getter/setter, use delete to remove things
     checkArg(1, index, 'number')
-    local oldValue = self._selection[index]
+    local oldValue = self._list[index]
     if newval ~= nil then --needs work 
         self._list[index] = newval --overwrite
     end
@@ -226,13 +226,15 @@ function SortedList:defaultCallback(_, eventName, uuid, x, y, button, playerName
         if index then
             self:select(index, button == 0) 
         end
+        return true
     elseif eventName == "scroll" then
         self:scroll(-button)
+        return true
     end
 end
 
 ---Draw the SortedList on screen
-function SortedList:draw()
+function SortedList:draw() --could make it check to see if its hitting the border of its parent and resize vertically
     if (not self:visible()) then return end
     local isBordered = self:bordered()
     local x, y, width, height = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0), self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
@@ -241,14 +243,14 @@ function SortedList:draw()
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     if newBG then gpu.setBackground(newBG) end
     if newFG then gpu.setForeground(newFG) end
-    gpu.fill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ") --overwrite the background
     
     if #self._list == 0 then return end
     local sorterFunc = self:sorter()
     if sorterFunc then 
         local succ, err = pcall(table.sort, self._list, sorterFunc) 
         if not succ then
-            gpu.set(x,y, unicode.sub(err, 1, width))
+            self:_gpuset(x,y, unicode.sub(err, 1, width))
             return
         end
     end
@@ -297,15 +299,15 @@ function SortedList:draw()
                 listValue = (not succ and '(format)' or '') .. returned --should be fine
             end
             listValue = (isNumbered and string.format(linePrefix, line, index) or "") .. tostring(listValue):gsub("\n","; ")
-            local isSelected = self:select(index)
+            local isSelected = self._selection[index]
             if isSelected and newFG and newBG then gpu.setBackground(newFG) gpu.setForeground(newBG) end
-            gpu.set(x, y+line-1, unicode.sub(listValue, 1, width) ) --do the formatting here
+            self:_gpuset(x, y+line-1, unicode.sub(listValue, 1, width) ) --do the formatting here
             if isSelected and newFG and newBG then gpu.setBackground(newBG) gpu.setForeground(newFG) end
         else
             local errVal = index:gsub("\n","; ")
             local failedIndex = errVal:match("%d+")
             errVal = unicode.sub(errVal, failedIndex:len()+2)
-            gpu.set(x, y+line-1, unicode.sub( (isNumbered and string.format(linePrefix, line, failedIndex) or "") .. errVal, 1, width) )
+            self:_gpuset(x, y+line-1, unicode.sub( (isNumbered and string.format(linePrefix, line, failedIndex) or "") .. errVal, 1, width) )
         end
     end
     gpu.setBackground(oldBG)

@@ -77,39 +77,39 @@ function ProgressBar:draw()
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     local fillBG = self:fillBackgroundColor()
     if newBG then gpu.setBackground(newBG) end
-    gpu.fill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ") --overwrite the background
     
     if value and value>0 then
         local percent = math.floor(0.5 + ((width - 1) * (value / 1))) --rounded, might not need -1    
         if newFG then gpu.setForeground(newFG) end
         if fillBG then gpu.setBackground(fillBG) end
         local fillChar = self:fillChar() or " "
-        gpu.fill(x , y, percent, height, fillChar) --might make funny tall slider
+        self:_gpufill(x , y, percent, height, fillChar) --might make funny tall slider
         --custom border
         local isBordered, borderSet = self:bordered(), self:borderSet()
         if newBG and isBordered and borderSet and width > 1 and height > 1 and fillChar == " " and fillBG and percent > 1 then
             local setLength = unicode.len(borderSet)
             if setLength > 3 then
-                gpu.set(x, y, unicode.charAt(borderSet, 1))                                         --topleft
-                gpu.set(x, y + height - 1, unicode.charAt(borderSet, 3))                            --bottomleft
+                self:_gpuset(x, y, unicode.charAt(borderSet, 1))                                         --topleft
+                self:_gpuset(x, y + height - 1, unicode.charAt(borderSet, 3))                            --bottomleft
                 if setLength > 4 then
                     local isSix = setLength == 6
-                    gpu.fill(x, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 7))             --left
+                    self:_gpufill(x, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 7))             --left
                     if percent >= width - 1 then
-                        gpu.fill(x + 1, y, width - 2, 1, unicode.charAt(borderSet, 5))                  --top
-                        gpu.fill(x + 1, y + height - 1, width - 2, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
+                        self:_gpufill(x + 1, y, width - 2, 1, unicode.charAt(borderSet, 5))                  --top
+                        self:_gpufill(x + 1, y + height - 1, width - 2, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
                     else
-                        gpu.fill(x + 1, y, percent - 1, 1, unicode.charAt(borderSet, 5))                  --top
-                        gpu.fill(x + 1, y + height - 1, percent - 1, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
+                        self:_gpufill(x + 1, y, percent - 1, 1, unicode.charAt(borderSet, 5))                  --top
+                        self:_gpufill(x + 1, y + height - 1, percent - 1, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
                         gpu.setBackground(newBG)
-                        gpu.fill(x + percent, y, (width - 1 ) - percent, 1, unicode.charAt(borderSet, 5)) --top
-                        gpu.fill(x + percent, y + height - 1, (width - 1 ) - percent, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
+                        self:_gpufill(x + percent, y, (width - 1 ) - percent, 1, unicode.charAt(borderSet, 5)) --top
+                        self:_gpufill(x + percent, y + height - 1, (width - 1 ) - percent, 1, unicode.charAt(borderSet, isSix and 5 or 6)) --bottom
                     end
                     if percent == width then gpu.setBackground(fillBG) end
-                    gpu.fill(x + width - 1, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 8)) -- right
+                    self:_gpufill(x + width - 1, y + 1, 1, height - 2, unicode.charAt(borderSet, isSix and 6 or 8)) -- right
                 end
-                gpu.set(x + width - 1, y, unicode.charAt(borderSet, 2, 2))                             --topright
-                gpu.set(x + width - 1, y + height - 1, unicode.charAt(borderSet, 4))                --bottomright
+                self:_gpuset(x + width - 1, y, unicode.charAt(borderSet, 2, 2))                             --topright
+                self:_gpuset(x + width - 1, y + height - 1, unicode.charAt(borderSet, 4))                --bottomright
             end
             if oldFG then gpu.setForeground(oldFG) end
             

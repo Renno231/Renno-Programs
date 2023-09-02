@@ -24,8 +24,24 @@ function Border:new(parent, x, y, borderset)
     o:borderSet(borderset)
     o:bordered(true)
     o:_borderOverride(true)
+    o:autoFit(true, true)
     ---@cast o Border
     return o
+end
+
+---@param value? boolean
+---@return boolean
+function Border:autoFit(widthval, heightval)
+    checkArg(1, widthval, 'boolean', 'nil')
+    checkArg(1, heightval, 'boolean', 'nil')
+    local oldValWidth, oldValHeight = self._autofitsWidth, self._autofitsHeight
+    if (widthval ~= nil) then
+        self._autofitsWidth = widthval
+    end
+    if (heightval ~= nil) then
+        self._autofitsHeight = heightval
+    end
+    return oldValWidth, oldValHeight
 end
 
 function Border:draw()
@@ -34,33 +50,44 @@ function Border:draw()
     local defaultBuffer, newBuffer = self:_initBuffer()
     
     --sort widgets by z
-    local unsorted = false
-    for i, w in pairs(self._childs) do
-        if (i > 1) then
-            if (self._childs[i - 1]:z() > w:z()) then
-                unsorted = true
-                break
+    self:_sort()
+    local isRoot = self:getParent() == nil
+    if isRoot then self:_tweenStep() end
+    --calculate tweens accordingly
+    local width, height = self:size()
+    local autoWidth, autoHeight = self:autoFit()
+    if #self._childs>0 and autoWidth or autoHeight then
+        width, height = autoWidth and 2 or width, autoHeight and 2 or height
+        local hasWelds = self._weldCount > 0
+        local tweenOrWeld = hasWelds and "_calculateWeld" or "_tweenStep"
+        if hasWelds then
+            for _, element in pairs(self._childs) do
+                element:_tweenStep()
             end
         end
+        for _, element in pairs(self._childs) do
+            element[tweenOrWeld](element)
+            --calcualte the Border dimensions and whatnot here after tweenstep
+            if element:visible() then
+                local distWidth = element:x() + element:width()
+                local distHeight = element:y() + element:height()
+                if autoWidth and distWidth > width then width = distWidth end
+                if autoHeight and distHeight > height then height = distHeight end 
+            end
+        end
+            
+        if autoWidth then 
+            self:width(width)
+        end
+        if autoHeight then
+            self:height(height)
+        end
     end
-    if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
-
-    --calculate tweens accordingly
-    local width, height = 2,2
-    for _, element in pairs(self._childs) do
-        element:_tweenStep()
-        --calcualte the Border dimensions and whatnot here after tweenstep
-        local distWidth = element:x() + element:width()
-        local distHeight = element:y() + element:height()
-        if distWidth > width then width = distWidth end
-        if distHeight > height then height = distHeight end 
-    end
-    self:size(width, height)
     --clean background
     if (self:backgroundColor()) then
         local oldBG = gpu.getBackground()
         gpu.setBackground(self:backgroundColor() --[[@as number]])
-        gpu.fill(x, y, width, height, " ")
+        self:_gpufill(x, y, width, height, " ")
         gpu.setBackground(oldBG)
     end
     --draw the children widgets after wiping background
@@ -68,7 +95,7 @@ function Border:draw()
         if element:draw() and element.drawBorder and not element._borderoverride then element:drawBorder() end
     end
     --draw the border
-    if self.drawBorder and self:bordered() then self:drawBorder() end
+    if isRoot and self.drawBorder and self:bordered() then self:drawBorder() end
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
     return true
