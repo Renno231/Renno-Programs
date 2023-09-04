@@ -271,7 +271,7 @@ function Text:draw()
     if height > 1 or textheight > 1 then
         local i, relativeX, relativeY, maxY = 1, 0, 0, y+height
         local str = self._parsedText[i]
-        while yStart+relativeY+1 < maxY and str do
+        while yStart+relativeY+1 < maxY and str and yStart+textheight>=y do
             if str then
                 relativeX, relativeY = (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or (xAlign == "right" and (xSection-unicode.len(str)-1)) or 0, i-1
                 if yStart+relativeY >= y then
