@@ -341,28 +341,33 @@ function Widget:checkCollision(x, y)
     return true
 end
 
-function Widget:_gpuset(x, y, str) --should maybe do some checkArg here
-    local parent = self:getParent()
+function Widget:_gpuset(x, y, str, useself) --should maybe do some checkArg here
+    local parent = useself and self or self:getParent()
     if parent then
         if str == "" then return end
         local px, py, pwidth, pheight = parent:absX(), parent:absY(), parent:width(), parent:height() 
-        if pwidth == 0 or pheight == 0 or x>px+pwidth-1 or y>py+pheight-1 or y<py then return end
+        --not perfect yet
+        if pwidth == 0 or pheight == 0 or x>px+pwidth-1 or y>=py+pheight or y<py then return end
         local len = unicode.len(str)
-        if x<px then --str length stuff, not quite correct
-            str = unicode.sub(str, math.abs(px-x)+1)
+        if x<px then
+            str = unicode.sub(str, math.floor(math.abs(px-x))+1)
             x = px
-        elseif x+len > px+pwidth then
-            str = unicode.sub(str, 1, pwidth-(x-px))
+            len = unicode.len(str)
         end
-        if x <= 0 and x>=-len then --override undocumented native gpu edge case detection
-            str = unicode.sub(str, -x+2)
+        if x+len > px+pwidth then
+            str = unicode.sub(str, 1, math.floor(pwidth-(x-px)))
+            len = unicode.len(str)
+        end
+        if x <= 0 and x>=-len+1 then --override undocumented native gpu edge case detection
+            str = unicode.sub(str, math.floor(-x+2))
+            x = 1
         end
     end
-    gpu.set(x,y,str)
+    gpu.set(math.floor(x), math.floor(y), str)
 end
 
-function Widget:_gpufill(x, y, width, height, char)
-    local parent = self:getParent()
+function Widget:_gpufill(x, y, width, height, char, useself)
+    local parent = useself and self or self:getParent()
     if parent then
         local px, py, pwidth, pheight = parent:absX(), parent:absY(), parent:width(), parent:height() 
         if pwidth == 0 or pheight == 0 or x>px+pwidth or y>py+pheight then return end

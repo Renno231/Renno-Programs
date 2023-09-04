@@ -34,33 +34,51 @@ function utils.RGBtoColor(r, g, b)
     return b + (g << 8) + (r << 16)
 end
 
-local function splitWords(Lines, limit)
-    while #Lines[#Lines] > limit do
-        Lines[#Lines+1] = Lines[#Lines]:sub(limit+1)
-        Lines[#Lines-1] = Lines[#Lines-1]:sub(1,limit)
+function utils.wrap(s, max)
+    local result = {}
+    for line in s:gmatch('[^\n]*') do
+        local paragraph = ""
+        local spaceLeft = max
+        for word, space in line:gmatch("(%S*)(%s*)") do
+            if (unicode.len(word) > max) then
+                while unicode.len(word) > 0 do
+                    local chunk = ""
+                    chunk, word = unicode.sub(word, 1, spaceLeft), unicode.sub(word, spaceLeft + 1)
+                    paragraph = paragraph .. chunk
+                    spaceLeft = spaceLeft - unicode.len(chunk)
+                    if (spaceLeft == 0) then
+                        paragraph = paragraph .. '\n'
+                        spaceLeft = max
+                    end
+                end
+            elseif (unicode.len(word) == max and spaceLeft == max) then
+                paragraph = paragraph .. word
+                spaceLeft = 0
+            elseif (unicode.len(word) == max and spaceLeft ~= max) then
+                paragraph = paragraph .. '\n' .. word
+                spaceLeft = 0
+            elseif (spaceLeft - unicode.len(word) >= 0) then
+                paragraph = paragraph .. word
+                spaceLeft = spaceLeft - unicode.len(word)
+            else
+                paragraph = paragraph .. '\n' .. word
+                spaceLeft = max - unicode.len(word)
+            end
+            space = space:sub(1, spaceLeft - unicode.len(space))
+            paragraph = paragraph .. space
+            spaceLeft = spaceLeft - unicode.len(space)
+            if (spaceLeft <= 0) then
+                paragraph = paragraph .. '\n'
+                spaceLeft = max
+            end
+        end
+        table.insert(result, paragraph)
     end
-end
-
-function utils.wrap(str, limit)
-    local Lines, here, limit, found = {}, 1, limit or 72, (str or ""):find("(%s+)()(%S+)()")
-    if not str then return Lines end
-    if found then
-        Lines[1] = string.sub(str,1,found-1)  -- Put the first word of the string in the first index of the table.
-    else Lines[1] = str end
-
-    str:gsub("(%s+)()(%S+)()",
-        function(sp, st, word, fi)  -- Function gets called once for every space found.
-            splitWords(Lines, limit)
-
-            if fi-here > limit then
-                here = st
-                Lines[#Lines+1] = word                                             -- If at the end of a line, start a new table index...
-            else Lines[#Lines] = Lines[#Lines].." "..word end  -- ... otherwise add to the current table index.
-        end)
-
-    splitWords(Lines, limit)
-
-    return Lines
+    local unbad = {}
+    for str in string.gmatch(table.concat(result,"\n"), "([^\n]+)") do
+        table.insert(unbad, str)
+    end
+    return unbad
 end
 
 function utils.formatNumberShort(number)

@@ -150,7 +150,7 @@ function Window:tabChars(chars)
     return oldValue
 end
 
-function Window:draw()
+function Window:draw() --should widgets in non selected tabs still get tween and weld updates?
     --frame default draw, then border draw on self, then draw the tabs on self over the border
     ScrollFrame.draw(self)
     if not self:visible() then return end
@@ -203,7 +203,7 @@ function Window:draw()
             end
             local isSelected = self._selectedTab and tab == self._selectedTab
             if isSelected then gpu.setBackground(oldFG) gpu.setForeground(oldBG) end
-            self:_gpuset(x+tabX, relativeY, tabDisplayName)
+            self:_gpuset(x+tabX, relativeY, tabDisplayName, true)
             for i = 1, nameLen do
                 hitbox[x + tabX + i - 1] = tab
             end
