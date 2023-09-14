@@ -59,7 +59,8 @@ function Text:text(...)
         for i,v in ipairs (values) do --table.concat bugs out sometimes
             values[i] = tostring(v)
         end
-        self._text = table.concat(values, " ")  
+        self._text = table.concat(values, " ")
+        self:_parse()
     end
     return oldValue
 end
