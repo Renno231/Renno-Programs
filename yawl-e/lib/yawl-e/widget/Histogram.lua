@@ -120,6 +120,7 @@ function Histogram:headline(value)
     checkArg(1, value, 'function', 'nil')
     local oldValue = self._headlineCallback
     if (value) then self._headlineCallback = value end
+    if value == false then self._headlineCallback = nil end
     return oldValue
 end
 
@@ -132,22 +133,39 @@ function Histogram:label(name)
     return oldValue
 end
 
+function Histogram:unit(unit)
+    checkArg(1, unit, 'string', 'nil', 'boolean')
+    local oldValue = self._unit
+    if (unit) then self._unit = unit end
+    if unit == false then self._unit = nil end
+    return oldValue
+end
+
 function Histogram:draw()
     if (not self:visible()) then return end
     --need to make an option to display data above or underneath of graph
+    local isBordered = self:bordered()
     local headlineFunc = self._headlineCallback
-    local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    local x, y, width, height = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0), self:width() + (isBordered and -2 or 0), 
+                                self:height() + (isBordered and -2 or 0)
+    if height == 0 or width == 0 then return end
     local xOffset, yOffset, maxValue = x + width - 1, y + height, self:maxValue() or height
     local totalPoints, fillChar = #self._data, self:fillChar()
     local mean, min, max = 0, maxValue, -1
-    local fgColor, bgColor, txtFgColor = self:fillForegroundColor(), self:fillBackgroundColor(), self:textForegroundColor() --colors
+    local fgColor, bgColor = self:foregroundColor(), self:backgroundColor()
+    local fillfgColor, fillbgColor, txtFgColor = self:fillForegroundColor(), self:fillBackgroundColor(), self:textForegroundColor() --colors
     local oldFG, oldBG = gpu.getForeground(), gpu.getBackground()
     --draw over area
     if headlineFunc then
         height = height - 2
     end
-    if bgColor then gpu.setBackground(bgColor) end
     if fgColor then gpu.setForeground(fgColor) end
+    if bgColor then 
+        gpu.setBackground(bgColor)
+        self:_gpufill(x, y + (headlineFunc and 2 or 0), width, height, " ") 
+    end
+    if fillfgColor then gpu.setForeground(fillfgColor) end
+    if fillbgColor then gpu.setBackground(fillbgColor) end
     local bars = math.min(width - 1, totalPoints)
     for i = 0, bars do
         local value = math.max(self._data[totalPoints - i] or 0, 0) --math max probably not necessary
@@ -162,7 +180,7 @@ function Histogram:draw()
     mean = mean / bars
     if headlineFunc then
         if txtFgColor then gpu.setForeground(txtFgColor) end
-        local headline, divider = headlineFunc(self:label(), width, min, max, maxValue, mean)
+        local succ, headline, divider = pcall(headlineFunc, self:label(), self:unit(), width, min, max, maxValue, self._data[totalPoints], mean)
         self:_gpuset(x, y, headline or "Headline missing!")
         self:_gpuset(x, y + 1, divider or string.rep("─", width))
     end
@@ -171,9 +189,9 @@ function Histogram:draw()
     return true
 end
 
-
+--[[
 local characters = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
 local charsV = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
-local charsH = {" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"}
+local charsH = {" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"}]]
 
 return Histogram
