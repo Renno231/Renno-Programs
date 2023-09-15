@@ -85,7 +85,7 @@ end
 
 function SliderBar:defaultCallback(_, eventName, _, x)
     if (eventName ~= 'drag' and eventName ~= 'touch') then return end
-    local t = x - self:x()
+    local t = x - self:absX()
     local a, b = 0, self:width() - 1
     local c, d = self:range()
     --math.round = function(a) return math.floor(a+0.5) end
@@ -109,6 +109,7 @@ function SliderBar:draw()
     --TODO : slider width
     if value then
         local percent = math.floor(((width - 1) * (value / (self:max() - self:min()))))
+        if newFG then gpu.setBackground(newFG) end
         self:_gpufill(x + percent, y, 1, height, " ") --might make funny tall slider
     end
     gpu.setBackground(oldBG)
