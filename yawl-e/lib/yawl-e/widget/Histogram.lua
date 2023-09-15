@@ -184,7 +184,7 @@ function Histogram:draw()
         if headline and unicode.len(headline) < width then
             headline = headline..string.rep(" ", width - unicode.len(headline))
         end
-        self:_gpuset(x, y, headline or "Headline missing!")
+        self:_gpuset(x, y, headline or "Headline missing!", true)
         if bgColor then 
             gpu.setBackground(bgColor)
         end
