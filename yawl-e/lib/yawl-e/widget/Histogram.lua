@@ -177,6 +177,8 @@ function Histogram:draw()
             mean = mean + value
         end
     end
+    if min == maxValue then min = 0 end
+    if math.abs(max) == 1 then max = 0 end
     mean = mean / (bars+1)
     if headlineFunc then
         if txtFgColor then gpu.setForeground(txtFgColor) end
