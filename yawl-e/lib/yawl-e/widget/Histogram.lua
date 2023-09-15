@@ -1,7 +1,7 @@
 local class = require("libClass2")
 local Frame = require("yawl-e.widget.Frame")
 local gpu = require("component").gpu
-
+local unicode = require"unicode"
 --[[
     Ideally, Histogram will have horizontal scrolling. Though there is some contention about the direction.
 ]]
@@ -170,7 +170,7 @@ function Histogram:draw()
     for i = 0, bars do
         local value = math.max(self._data[totalPoints - i] or 0, 0) --math max probably not necessary
         if value > 0 then                                           --temporary debug
-            local pixelHeight = math.min(math.floor((value / maxValue) * height), height)
+            local pixelHeight = math.min(math.floor(0.5 + (value / maxValue) * height), height)
             if value < min then min = value end
             if value > max then max = value end
             self:_gpufill(xOffset - i, yOffset - pixelHeight, 1, pixelHeight, fillChar)
@@ -181,8 +181,14 @@ function Histogram:draw()
     if headlineFunc then
         if txtFgColor then gpu.setForeground(txtFgColor) end
         local succ, headline, divider = pcall(headlineFunc, self:label(), self:unit(), width, min, max, maxValue, self._data[totalPoints], mean)
+        if headline and unicode.len(headline) < width then
+            headline = headline..string.rep(" ", width - unicode.len(headline))
+        end
         self:_gpuset(x, y, headline or "Headline missing!")
-        self:_gpuset(x, y + 1, divider or string.rep("─", width))
+        if bgColor then 
+            gpu.setBackground(bgColor)
+        end
+        self:_gpuset(x, y + 1, divider or string.rep(unicode.char(0x1fb02), width))
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
