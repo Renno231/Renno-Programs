@@ -177,7 +177,7 @@ function Histogram:draw()
             mean = mean + value
         end
     end
-    mean = mean / bars
+    mean = mean / (bars+1)
     if headlineFunc then
         if txtFgColor then gpu.setForeground(txtFgColor) end
         local succ, headline, divider = pcall(headlineFunc, self:label(), self:unit(), width, min, max, maxValue, self._data[totalPoints], mean)
