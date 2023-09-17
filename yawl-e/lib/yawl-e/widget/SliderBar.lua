@@ -85,11 +85,11 @@ end
 
 function SliderBar:defaultCallback(_, eventName, _, x)
     if (eventName ~= 'drag' and eventName ~= 'touch') then return end
-    local t = x - self:absX()
-    local a, b = 0, self:width() - 1
+    local t = x - self:absX() --technically this should be + 1
+    local b = self:width() - 1 --and this shouldn't be changed
     local c, d = self:range()
     --math.round = function(a) return math.floor(a+0.5) end
-    self:value(math.floor((c + ((d - c) / (b - a)) * (t - a)) + 0.5))
+    self:value(math.floor((c + ((d - c) / b ) * t) + 0.5))
     return true
 end
 
