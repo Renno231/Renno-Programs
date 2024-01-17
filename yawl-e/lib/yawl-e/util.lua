@@ -34,6 +34,7 @@ function utils.RGBtoColor(r, g, b)
     return b + (g << 8) + (r << 16)
 end
 
+--string, maxwidth
 function utils.wrap(s, max)
     local result = {}
     for line in s:gmatch('[^\n]*') do
@@ -81,10 +82,10 @@ function utils.wrap(s, max)
     return unbad
 end
 
-function utils.formatNumberShort(number)
+function utils.formatNumberShort(number, units)
     if type(number) ~= "number" then return "" end
     local absNum = math.abs(number)
-    local units = { "", "k", "m", "b", "t" } -- Add more units for larger numbers if needed
+    units = units or { "", "k", "m", "b", "t" } -- Add more units for larger numbers if needed
     local currentUnit = 1
 
     while absNum >= 1000 and currentUnit < #units do
@@ -107,7 +108,7 @@ function utils.formatNumberShort(number)
     return formattedNumber .. units[currentUnit]
 end
 
-local Tab = {} --designed to be used in Window widget
+local Tab = {} --designed to be used in Window widget as helper class
 Tab.__index = Tab
 
 function Tab:new(parent, name, x, y)
@@ -141,6 +142,22 @@ function Tab:displayName(text)
     if text~=nil then
         self._displayName = text
     end
+    return oldValue
+end
+
+function Tab:scrollX(num, override)
+    checkArg(1, num, 'number', 'nil')
+    checkArg(2, override, 'boolean','nil')
+    local oldValue = self._scrollX or 0
+    if (num) then self._scrollX = override and num or ((self._scrollX or oldValue) + num) end
+    return oldValue
+end
+
+function Tab:scrollY(num, override)
+    checkArg(1, num, 'number', 'nil')
+    checkArg(2, override, 'boolean','nil')
+    local oldValue = self._scrollY or 0
+    if (num) then self._scrollY = override and num or ((self._scrollY or oldValue) + num) end
     return oldValue
 end
 
