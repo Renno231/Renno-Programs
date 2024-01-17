@@ -2,6 +2,7 @@ local class = require("libClass2")
 local Frame = require("yawl-e.widget.Frame")
 
 local ScrollFrame = class(Frame) 
+ScrollFrame:propagateFirst(true)
     --extends frame object
 function ScrollFrame:scrollX(num, override)
     checkArg(1, num, 'number', 'nil')

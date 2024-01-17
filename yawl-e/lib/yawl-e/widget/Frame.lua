@@ -60,6 +60,7 @@ function Frame:new(parentFrame, x, y)
     o:size(w - o:x() + 1, h - o:y() + 1)
     o._lastTouch = {x = 0, y = 0, t = 0}
     o._weldCount = 0
+    o._propagateFirst = false
     if (not parentFrame) then
         o._listeners.touch =  event.listen("touch",  function(...) o:_touchHandler(...)  end)
         o._listeners.drag =   event.listen("drag",   function(...) o:propagateEvent(...) end)
@@ -119,10 +120,19 @@ function Frame:propagateEvent(eName, screenAddress, x, y, ...)
             if (w:instanceOf(Frame)) then
                 ---@cast w Frame
                 --frame needs callback first, if not return true then propagate downward
-                if w:invokeCallback(eName, screenAddress, x, y, ...) == true then
-                    return true
-                elseif (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
-                    return true
+                local propagateFirst = w:propagateFirst()
+                if propagateFirst then
+                    if (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
+                        return true
+                    elseif w:invokeCallback(eName, screenAddress, x, y, ...) == true then
+                        return true
+                    end
+                else
+                    if w:invokeCallback(eName, screenAddress, x, y, ...) == true then
+                        return true
+                    elseif (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
+                        return true
+                    end
                 end
             else    
                 w:invokeCallback(eName, screenAddress, x, y, ...)
@@ -130,6 +140,13 @@ function Frame:propagateEvent(eName, screenAddress, x, y, ...)
             return true
         end
     end
+end
+
+function Frame:propagateFirst(value)
+    checkArg(1, value, 'boolean', 'nil')
+    local oldValue = self._propagateFirst
+    if (value ~= nil) then self._propagateFirst = value end
+    return oldValue
 end
 
 ---@param value? number

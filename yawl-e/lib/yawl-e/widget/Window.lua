@@ -35,6 +35,7 @@ function Window:new(parentFrame, x, y, width, height)
     o._hitboxTop = {} --each index represents x coordinate where a tab is drawn and points towards the tab drawn
     o._hitboxBottom = {}
     o:size(width, height)
+    o:propagateFirst(true)
     --self._selectedTab
     return o
 end
