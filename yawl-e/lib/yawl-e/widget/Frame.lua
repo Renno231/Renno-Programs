@@ -112,6 +112,7 @@ end
 function Frame:propagateEvent(eName, screenAddress, x, y, ...)
     if (not self:enabled()) then return end
     table.sort(self._childs, function(a, b) return a:z() < b:z() end)
+    local selfPropagateFirst = self:propagateFirst()
     for i = #(self._childs), 1, -1 do
         local w = self._childs[i]
         --TODO : find a new yeilding methods
@@ -120,8 +121,8 @@ function Frame:propagateEvent(eName, screenAddress, x, y, ...)
             if (w:instanceOf(Frame)) then
                 ---@cast w Frame
                 --frame needs callback first, if not return true then propagate downward
-                local propagateFirst = w:propagateFirst()
-                if propagateFirst then
+                local childPropagateFirst = w:propagateFirst()
+                if childPropagateFirst then
                     if (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
                         return true
                     elseif w:invokeCallback(eName, screenAddress, x, y, ...) == true then
@@ -135,7 +136,9 @@ function Frame:propagateEvent(eName, screenAddress, x, y, ...)
                     end
                 end
             else    
-                w:invokeCallback(eName, screenAddress, x, y, ...)
+                if w:invokeCallback(eName, screenAddress, x, y, ...) ~= true and selfPropagateFirst then
+                    self:invokeCallback(eName, screenAddress, x, y, ...)
+                end
             end
             return true
         end
