@@ -102,8 +102,8 @@ function Window:selectTab(tabname, state) --method name not set in stone
     if foundTab then
         self._selectedTab = foundTab
         self._childs = foundTab._childs
-        self:scrollX(foundTab._scrollX)
-        self:scrollY(foundTab._scrollY)
+        self:scrollX(foundTab._scrollX, true)
+        self:scrollY(foundTab._scrollY, true)
         foundTab._lastSelected = computer.uptime()
     end
 end
