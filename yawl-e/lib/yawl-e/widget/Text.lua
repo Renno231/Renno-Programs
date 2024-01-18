@@ -243,7 +243,9 @@ end
 function Text:draw()
     if not self:visible() then return end
     local isBordered = self:bordered()
-    local x, y, width, height = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0), self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
+    local x, y = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0)
+    local width, height = self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
+    
     -- local maxWidth, maxHeight --= self:maxWidth(), self:maxHeight()
     if height == 0 or width == 0 then return end
     local oldBG, oldFG = gpu.getBackground(), gpu.getForeground()
@@ -261,12 +263,11 @@ function Text:draw()
     local xSection = math.floor(0.5 + width  / 3)
     local ySection = math.floor(0.5 + height / 3)
     local xAlign, yAlign = self:textHorizontalAlignment(), self:textVerticalAlignment()
-    local xStart, yStart = xScroll + x+(xOff+1)*xSection, 
-        ((yAlign == "center" and 0.5*(ySection-textheight)) or
-        (yAlign == "bottom" and (ySection-textheight)) or 0) ---
-        + (yScroll + y + ((yOff+1) * ySection))
-        
-        
+    local xStart = xScroll + x + (xOff + 1) * xSection
+    local yStart =  ((yAlign == "center" and 0.5*(ySection-textheight)) or
+                    (yAlign == "bottom" and (ySection-textheight)) or 0) 
+                    + (yScroll + y + ((yOff+1) * ySection))
+                    
     if yOff == 0 and height%textheight>0 and not (height%2>0 and textheight%2>0) then
         yStart = yStart + 1
     end
@@ -279,11 +280,12 @@ function Text:draw()
         local str = self._parsedText[i]
         while yStart+relativeY+1 <= maxY and str and yStart+textheight>=y do
             if str then
-                relativeX, relativeY = (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or (xAlign == "right" and (xSection-unicode.len(str)-1)) or 0, i-1
-                
+                relativeX = (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or 
+                            (xAlign == "right" and (xSection-unicode.len(str))) or 
+                            0
+                relativeY = i-1
                 if yStart+relativeY >= y then
-                    self:_gpuset(xStart+relativeX, yStart+relativeY, str) --, self._tweenSize~=nil or self._tweenPos~=nil)
-                    
+                    self:_gpuset(xStart+relativeX, yStart+relativeY, str)
                 end
                 i=i+1
             end
@@ -291,7 +293,10 @@ function Text:draw()
         end
     else
         local str = self:text():gsub("\n","")
-        self:_gpuset(x, y, str, true)
+        local relativeX =   (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or 
+                            (xAlign == "right" and (xSection-unicode.len(str))) or 
+                            0
+        self:_gpuset(xStart + relativeX, y, str, true)
     end
     
     gpu.setForeground(oldFG)
