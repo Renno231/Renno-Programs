@@ -105,7 +105,9 @@ function Frame:removeChild(child)
 end
 
 function Frame:clearChildren()
-    self._childs = {}
+    for _, element in pairs(self._childs) do
+        element:Destroy(true)
+    end
     return true
 end
 
