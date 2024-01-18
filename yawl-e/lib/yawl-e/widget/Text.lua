@@ -244,10 +244,11 @@ function Text:draw()
     if not self:visible() then return end
     local isBordered = self:bordered()
     local x, y, width, height = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0), self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
-    local maxWidth, maxHeight --= self:maxWidth(), self:maxHeight()
+    -- local maxWidth, maxHeight --= self:maxWidth(), self:maxHeight()
     if height == 0 or width == 0 then return end
     local oldBG, oldFG = gpu.getBackground(), gpu.getForeground()
-    local newBG, newFG = self:backgroundColor(), self:foregroundColor()
+    local parent = self:getParent()
+    local newBG, newFG = self:backgroundColor() or (parent and parent:backgroundColor()), self:foregroundColor()
     if newBG then  --could use self:parent():backgroundColor()
         gpu.setBackground(newBG)
         self:_gpufill(x, y, width, height, " ")
@@ -257,7 +258,7 @@ function Text:draw()
     local textheight = #self._parsedText
     local xScroll, yScroll = self:scrollX(), self:scrollY()
     local xOff, yOff = self:textOffset()
-    local xSection = math.floor(0.5 + width / 3)
+    local xSection = math.floor(0.5 + width  / 3)
     local ySection = math.floor(0.5 + height / 3)
     local xAlign, yAlign = self:textHorizontalAlignment(), self:textVerticalAlignment()
     local xStart, yStart = xScroll + x+(xOff+1)*xSection, 
@@ -265,18 +266,24 @@ function Text:draw()
         (yAlign == "bottom" and (ySection-textheight)) or 0) ---
         + (yScroll + y + ((yOff+1) * ySection))
         
-    if ( height%2>0 and textheight%2>0 and yOff == 0) or (not isBordered and yOff == 1 and (height-1)%3==0) then 
+        
+    if yOff == 0 and height%textheight>0 and not (height%2>0 and textheight%2>0) then
+        yStart = yStart + 1
+    end
+    if not isBordered and yOff == 1 and (height-1)%3==0 then 
         yStart = yStart + 1
     end
     --ugly and complicated, but it seems to work
     if height > 1 or textheight > 1 then
         local i, relativeX, relativeY, maxY = 1, 0, 0, y+height
         local str = self._parsedText[i]
-        while yStart+relativeY+1 < maxY and str and yStart+textheight>=y do
+        while yStart+relativeY+1 <= maxY and str and yStart+textheight>=y do
             if str then
                 relativeX, relativeY = (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or (xAlign == "right" and (xSection-unicode.len(str)-1)) or 0, i-1
+                
                 if yStart+relativeY >= y then
-                    self:_gpuset(xStart+relativeX, yStart+relativeY, str, true)
+                    self:_gpuset(xStart+relativeX, yStart+relativeY, str) --, self._tweenSize~=nil or self._tweenPos~=nil)
+                    
                 end
                 i=i+1
             end
