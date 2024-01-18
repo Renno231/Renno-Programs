@@ -340,21 +340,24 @@ function Widget:checkCollision(x, y)
     if (y > aby + height - 1) then return false end
     return true
 end
-
+ 
+--not perfect yet
 function Widget:_gpuset(x, y, str, useself) --should maybe do some checkArg here
-    local parent = useself and self or self:getParent()
-    if parent then
-        if str == "" then return end
-        local px, py, pwidth, pheight = parent:absX(), parent:absY(), parent:width(), parent:height() 
-        --not perfect yet
-        if pwidth == 0 or pheight == 0 or x>px+pwidth-1 or y>=py+pheight or y<py then return end
+    if str == "" then return end
+    local boundary = self:getParent() --useself and self or self:getboundary()
+    for i=1, 2 do
+        if i == 2 then boundary = self end
+        local px, py, pwidth, pheight = boundary:absX(), boundary:absY(), boundary:width(), boundary:height()
+        if pwidth == 0 or pheight == 0 or x>px+pwidth-1 or y>=py+pheight or y<py then 
+            return   --off screen 
+        end
         local len = unicode.len(str)
-        if x<px then
+        if x<px then --left bound
             str = unicode.sub(str, math.floor(math.abs(px-x))+1)
             x = px
             len = unicode.len(str)
         end
-        if x+len > px+pwidth then
+        if x+len > px+pwidth then --right bound
             str = unicode.sub(str, 1, math.floor(pwidth-(x-px)))
             len = unicode.len(str)
         end
@@ -362,14 +365,16 @@ function Widget:_gpuset(x, y, str, useself) --should maybe do some checkArg here
             str = unicode.sub(str, math.floor(-x+2))
             x = 1
         end
+        if str == "" then return end
     end
+    
     gpu.set(math.floor(x), math.floor(y), str)
 end
 
 function Widget:_gpufill(x, y, width, height, char, useself)
-    local parent = useself and self or self:getParent()
-    if parent then
-        local px, py, pwidth, pheight = parent:absX(), parent:absY(), parent:width(), parent:height() 
+    local boundary = useself and self or self:getParent()
+    if boundary then
+        local px, py, pwidth, pheight = boundary:absX(), boundary:absY(), boundary:width(), boundary:height() 
         if pwidth == 0 or pheight == 0 or x>px+pwidth or y>py+pheight then return end
         if x<px then --off to the left
             width = width + (x-px)
