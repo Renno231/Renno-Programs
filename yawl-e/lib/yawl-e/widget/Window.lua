@@ -40,7 +40,16 @@ function Window:new(parentFrame, x, y, width, height)
     return o
 end
 
---need to decide how to add widgets to different tabs
+function Window:propagateEvent(eName, screenAddress, x, y, ...)
+    local abx,aby = self:absX()+1, self:absY()+1
+    local width,height = self:width()-2, self:height()-2
+    -- checking if the event is on the edge of the window
+    if (x < abx ) then return false end
+    if (x > abx + width - 1) then return false end
+    if (y < aby) then return false end
+    if (y > aby + height - 1) then return false end
+    return ScrollFrame.propagateEvent(self, eName, screenAddress, x, y, ...)
+end
 
 function Window:tab(tabName) --retrieves tab if it exists
     checkArg(1, tabName, 'string', 'nil')
