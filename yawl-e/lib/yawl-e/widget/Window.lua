@@ -41,13 +41,19 @@ function Window:new(parentFrame, x, y, width, height)
 end
 
 function Window:propagateEvent(eName, screenAddress, x, y, ...)
-    local abx,aby = self:absX()+1, self:absY()+1
-    local width,height = self:width()-2, self:height()-2
+    local isBordered = self:bordered()
+    local abx, aby = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0)
+    local width, height = self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
     -- checking if the event is on the edge of the window
     if (x < abx ) then return false end
     if (x > abx + width - 1) then return false end
     if (y < aby) then return false end
     if (y > aby + height - 1) then return false end
+    local hitbox = (y == aby and self._hitboxBottom) or (y == aby+height-1 and self._hitboxTop)
+    local tab = hitbox and hitbox[x]
+    if tab then --need to account for border?
+        return false
+    end
     return ScrollFrame.propagateEvent(self, eName, screenAddress, x, y, ...)
 end
 
