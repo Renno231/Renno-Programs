@@ -1,6 +1,6 @@
 local gpu = require("component").gpu
 local Widget = require("yawl-e.widget.Widget")
-
+-- need to make it possible to support vertical
 ---@class SliderBar:Widget
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,min:number|nil,max:number|nil,backgroundColor:number|nil,foregroundColor:number|nil):SliderBar
 local SliderBar = require("libClass2")(Widget)
@@ -102,15 +102,15 @@ function SliderBar:draw()
     if newBG then
         gpu.setBackground(newBG)
     end
-    self:_gpufill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ", true) --overwrite the background
     if newFG then gpu.setForeground(newFG) end
     self:_gpufill(x, y + math.ceil(height / 2) - 1, width, 1, "━")
     --gpu.setBackground(self._slider.backgroundColor) --maybe
     --TODO : slider width
     if value then
-        local percent = math.floor(((width - 1) * (value / (self:max() - self:min()))))
-        if newFG then gpu.setBackground(newFG) end
-        self:_gpufill(x + percent, y, 1, height, " ") --might make funny tall slider
+        local barX = math.floor((width - 1) * (value - self:min()) / (self:max() - self:min()) + 0.5)
+        if newFG then gpu.setBackground(newFG) end  
+        self:_gpufill(x + barX, y, 1, height, " ", true)
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
