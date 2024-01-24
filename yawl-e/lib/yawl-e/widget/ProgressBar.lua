@@ -77,7 +77,7 @@ function ProgressBar:draw()
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     local fillBG = self:fillBackgroundColor()
     if newBG then gpu.setBackground(newBG) end
-    self:_gpufill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ", true) --overwrite the background
     
     if value and value>0 then
         local percent = math.floor(0.5 + ((width - 1) * (value / 1))) --rounded, might not need -1    

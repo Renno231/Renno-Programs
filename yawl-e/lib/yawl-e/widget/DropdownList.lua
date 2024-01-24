@@ -52,8 +52,8 @@ function DropdownList:list(newlist) -- e.g., dropdown:list():sorter(function(...
                     end
                     return true
                 elseif eventName == "scroll" then
-                    self:scroll(-button)
-                    return true
+                    local oldScroll = self:scroll(-button)
+                    return oldScroll~=self:scroll()
                 end
             end)
         end
@@ -127,7 +127,7 @@ function DropdownList:draw()
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     if newBG then gpu.setBackground(newBG) end
     if newFG then gpu.setForeground(newFG) end
-    self:_gpufill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ", true) --overwrite the background
     local list = self._list
     if not list then return end
     list:width(width)
@@ -149,6 +149,13 @@ function DropdownList:draw()
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
     return true
+end
+
+function DropdownList:Destroy(force)
+    if self._list and self._list.Destroy then
+        self._list:Destroy(force)
+    end
+    Widget.Destroy(self, force)
 end
 
 return DropdownList

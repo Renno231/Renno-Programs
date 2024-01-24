@@ -173,13 +173,13 @@ function SortedList:mount(object)
     return oldValue
 end
 
-function SortedList:scroll(value) --not perfect, needs refinement for when filter has been applied, needs to differentiate between unfiltered and filtered
+function SortedList:scroll(value, override) --not perfect, needs refinement for when filter has been applied, needs to differentiate between unfiltered and filtered
     checkArg(1, value, 'number', 'nil')
     local oldValue = self._contextScroll or self._scrollindex or 0
     
     if (value ~= nil) then --and height <= shownheight then 
         if self._filter == "" or not self._filter then --I know, you won't like that I accessed them directly
-            self._scrollindex = math.max(math.min(#self._list - self:height(), self._scrollindex + value), 0)
+            self._scrollindex = math.max(math.min(#self._list - self:height(), (override and 0 or self._scrollindex) + value), 0)
         elseif #self._shown > 0 then --filterBy is set and there is something to visually scroll
             local currentListIndex = self._shown[1]
             if self._contextScroll == 0 then 
@@ -228,8 +228,8 @@ function SortedList:defaultCallback(_, eventName, uuid, x, y, button, playerName
         end
         return true
     elseif eventName == "scroll" then
-        self:scroll(-button)
-        return true
+        local oldScroll = self:scroll(-button)
+        return oldScroll~=self:scroll()
     end
 end
 
@@ -243,7 +243,7 @@ function SortedList:draw() --could make it check to see if its hitting the borde
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     if newBG then gpu.setBackground(newBG) end
     if newFG then gpu.setForeground(newFG) end
-    self:_gpufill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ", true) --overwrite the background
     
     if #self._list == 0 then return end
     local sorterFunc = self:sorter()

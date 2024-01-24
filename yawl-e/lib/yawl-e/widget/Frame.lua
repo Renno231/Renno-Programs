@@ -95,8 +95,8 @@ end
 ---@return T? child
 function Frame:removeChild(child)
     local childId = 0
-    for i, v in pairs(self._childs) do
-        if (v == child) then childId = i end
+    for i, v in ipairs(self._childs) do
+        if (v == child) then childId = i break end
     end
     if (childId > 0) then
         table.remove(self._childs, childId)
@@ -105,27 +105,26 @@ function Frame:removeChild(child)
 end
 
 function Frame:clearChildren()
-    for _, element in pairs(self._childs) do
+    for _, element in ipairs(self._childs) do
         element:Destroy(true)
     end
+    self._childs = {}
     return true
 end
 
 function Frame:propagateEvent(eName, screenAddress, x, y, ...)
     if (not self:enabled()) then return end
     table.sort(self._childs, function(a, b) return a:z() < b:z() end)
-    local selfPropagateFirst = self:propagateFirst()
+    
     for i = #(self._childs), 1, -1 do
         local w = self._childs[i]
-        --TODO : find a new yeilding methods
-        --os.sleep()
         if (w:checkCollision(x, y)) then
+            local cSuccess 
             if (w:instanceOf(Frame)) then
                 ---@cast w Frame
                 --frame needs callback first, if not return true then propagate downward
-                local childPropagateFirst = w:propagateFirst()
-                if childPropagateFirst then
-                    if (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
+                if w:propagateFirst() then
+                    if (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then
                         return true
                     elseif w:invokeCallback(eName, screenAddress, x, y, ...) == true then
                         return true
@@ -133,18 +132,22 @@ function Frame:propagateEvent(eName, screenAddress, x, y, ...)
                 else
                     if w:invokeCallback(eName, screenAddress, x, y, ...) == true then
                         return true
-                    elseif (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
+                    elseif (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then
                         return true
                     end
                 end
-            else    
-                if w:invokeCallback(eName, screenAddress, x, y, ...) ~= true and selfPropagateFirst then
-                    self:invokeCallback(eName, screenAddress, x, y, ...)
-                end
+            else
+                cSuccess = w:invokeCallback(eName, screenAddress, x, y, ...)
             end
-            return true
+            
+            if cSuccess or (w:lockPropagationOnCallback() and (w:callback() ~= w.defaultCallback or w.defaultCallback~=Widget.defaultCallback)) then
+                return true
+            else
+                return self:invokeCallback(eName, screenAddress, x, y, ...)
+            end 
         end
     end
+    return self:invokeCallback(eName, screenAddress, x, y, ...) 
 end
 
 function Frame:propagateFirst(value)
@@ -161,6 +164,24 @@ function Frame:doubleTouchDelay(value)
     local oldValue = self._doubleTouchDelay or 0.5
     if (value ~= nil) then self._doubleTouchDelay = value end
     return oldValue
+end
+
+function Frame:_drawnBounds(x,y,width,height)
+    checkArg(1, x, 'number', 'nil')
+    checkArg(1, y, 'number', 'nil')
+    checkArg(1, width, 'number', 'nil')
+    checkArg(1, height, 'number', 'nil')
+    local oldValue = self._drawnBoundsValues
+    if (x and y and width and height) then 
+        self._drawnBoundsValues = self._drawnBoundsValues or {}
+        self._drawnBoundsValues[1] = x -- = {x,y,width,height} 
+        self._drawnBoundsValues[2] = y
+        self._drawnBoundsValues[3] = width
+        self._drawnBoundsValues[4] = height
+    end
+    if oldValue then
+        return oldValue[1], oldValue[2], oldValue[3], oldValue[4]
+    end
 end
 
 ---initialize a frame buffer
@@ -214,11 +235,14 @@ function Frame:draw()
     local defaultBuffer, newBuffer = self:_initBuffer()
 
     --clean background
-    if (self:backgroundColor()) then
+    local newBG = self:backgroundColor()
+    if (newBG) then
         local oldBG = gpu.getBackground()
-        gpu.setBackground(self:backgroundColor() --[[@as number]])
-        self:_gpufill(x, y, width, height, " ")
+        gpu.setBackground(newBG)
+        self:_gpufill(x, y, width, height, " ", true)
         gpu.setBackground(oldBG)
+    else
+        self:_gpufill(x, y, width, height, " ", true)
     end
     if not self._childs then return false end
     if #self._childs == 0 then return end

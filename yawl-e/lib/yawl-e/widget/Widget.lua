@@ -340,14 +340,30 @@ function Widget:checkCollision(x, y)
     if (y > aby + height - 1) then return false end
     return true
 end
+
+function Widget:lockPropagationOnCallback(value)
+    checkArg(1, value, 'boolean', 'nil')
+    local oldValue = self._shouldLockOnCallback
+    if oldValue == nil then oldValue = true end
+    if (value ~= nil) then self._shouldLockOnCallback = value end
+    return oldValue
+end
  
 --not perfect yet
 function Widget:_gpuset(x, y, str, useself) --should maybe do some checkArg here
     if str == "" then return end
-    local boundary = self:getParent() --useself and self or self:getboundary()
+    local boundary = self:getParent()
+    if not boundary then return end
+    x, y = math.floor(x), math.floor(y)
     for i=1, 2 do
         if i == 2 then boundary = self end
         local px, py, pwidth, pheight = boundary:absX(), boundary:absY(), boundary:width(), boundary:height()
+        if i == 1 and boundary._drawnBounds then
+            local pdx, pdy, pdwidth, pdheight = boundary:_drawnBounds()
+            if pdx then
+                px, py, pwidth, pheight = pdx, pdy, pdwidth, pdheight
+            end
+        end
         if pwidth == 0 or pheight == 0 or x>px+pwidth-1 or y>=py+pheight or y<py then 
             return   --off screen 
         end
@@ -368,14 +384,37 @@ function Widget:_gpuset(x, y, str, useself) --should maybe do some checkArg here
         if str == "" then return end
     end
     
-    gpu.set(math.floor(x), math.floor(y), str)
+    gpu.set(x, y, str)
 end
 
-function Widget:_gpufill(x, y, width, height, char, useself)
-    local boundary = useself and self or self:getParent()
-    if boundary then
+function Widget:_gpufill(x, y, width, height, char, isBoundingBox) --needs work
+    x, y = math.floor(x), math.floor(y)
+    local widgetParent = self:getParent()
+    if widgetParent == nil and self._drawnBounds then
+        self:_drawnBounds(x, y, width, height)
+        if self:backgroundColor() then
+            gpu.fill(x,y,width,height," ")
+        end
+        return
+    elseif widgetParent == nil or char == nil or char == "" then
+        return
+    end
+    
+    local boundary = widgetParent
+    for i=1, 2 do
+        if i == 2 then
+            boundary = self 
+        end
         local px, py, pwidth, pheight = boundary:absX(), boundary:absY(), boundary:width(), boundary:height() 
-        if pwidth == 0 or pheight == 0 or x>px+pwidth or y>py+pheight then return end
+        if i == 1 and boundary._drawnBounds then
+            local pdx, pdy, pdwidth, pdheight = boundary:_drawnBounds()
+            if pdx then
+                px, py, pwidth, pheight = pdx, pdy, pdwidth, pdheight
+            end
+        end
+        if pwidth == 0 or pheight == 0 or x>px+pwidth or y>py+pheight then 
+            return 
+        end
         if x<px then --off to the left
             width = width + (x-px)
             x=px
@@ -391,7 +430,12 @@ function Widget:_gpufill(x, y, width, height, char, useself)
             height = pheight-(y-py)
         end
     end
+    
     gpu.fill(x,y,width,height,char)
+    if isBoundingBox and self._drawnBounds then
+        self:_drawnBounds(x, y, width, height)
+    end
+    -- return
 end
 
 ---Draw the widgets in the container
@@ -526,16 +570,17 @@ end
 
 function Widget:Destroy(force) --unparent and then .. ? 
     self:closeListeners()
-    if force and self._childs then
-        for _, element in pairs(self._childs) do
-            element:Destroy(force)
-        end    
-    end
-    self:breakWelds()
-    self:setParent(nil, nil)
     if self.clearChildren then --should frames destroy any child objects when being destroyed?
         self:clearChildren()
+    elseif force and self._childs then
+        for _, element in ipairs(self._childs) do
+            element:Destroy(force)
+        end
+        self._childs = {}
     end
+    
+    self:breakWelds()
+    self:setParent(nil, nil)
     for i, v in pairs (self) do --hmm..
         --if type(v) == "table" and v.Destroy then v:Destroy() end
         rawset(self, i, nil)

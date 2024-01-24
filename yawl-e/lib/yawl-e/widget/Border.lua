@@ -87,7 +87,7 @@ function Border:draw()
     if (self:backgroundColor()) then
         local oldBG = gpu.getBackground()
         gpu.setBackground(self:backgroundColor() --[[@as number]])
-        self:_gpufill(x, y, width, height, " ")
+        self:_gpufill(x, y, width, height, " ", true)
         gpu.setBackground(oldBG)
     end
     --draw the children widgets after wiping background
