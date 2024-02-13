@@ -1,12 +1,10 @@
 
-local path, ecc, mapToStr, strToByteArr, byteTableMT = ...
-if not (ecc and mapToStr and strToByteArr and byteTableMT) then
-    error(path.."is a private sublibrary of ecc, use the ecc library instead")
+local path, ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT = ...
+if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
+    error((path or "curve.lua").."is a private sublibrary of ecc, use the ecc library instead")
 end
 local unpack = table.unpack
-local arith = ecc.arith
-local modp = ecc.modp
-local modq = ecc.modq
+
 -- Elliptic curve arithmetic
 local curve = {}
 ---- About the Curve Itself
@@ -33,17 +31,17 @@ local curve = {}
 -- Completeness? Yes: The curve is complete.
 -- Indistinguishability? Yes (Elligator 2), but not implemented.
 
-local isEqual = arith.isEqual
-local NAF = arith.NAF
-local encodeInt = arith.encodeInt
-local decodeInt = arith.decodeInt
-local multModP = modp.multModP
-local squareModP = modp.squareModP
-local addModP = modp.addModP
-local subModP = modp.subModP
-local montgomeryModP = modp.montgomeryModP
-local expModP = modp.expModP
-local inverseMontgomeryModQ = modq.inverseMontgomeryModQ
+local isEqual = lazyLoad("arith", "isEqual")
+local NAF = lazyLoad("arith", "NAF")
+local encodeInt = lazyLoad("arith", "encodeInt")
+local decodeInt = lazyLoad("arith", "decodeInt")
+local multModP = lazyLoad("modp", "multModP")
+local squareModP = lazyLoad("modp", "squareModP")
+local addModP = lazyLoad("modp", "addModP")
+local subModP = lazyLoad("modp", "subModP")
+local montgomeryModP = lazyLoad("modp", "montgomeryModP")
+local expModP = lazyLoad("modp", "expModP")
+local inverseMontgomeryModQ = lazyLoad("modq", "inverseMontgomeryModQ")
 
 local pointMT
 local ZERO = {0, 0, 0, 0, 0, 0, 0}

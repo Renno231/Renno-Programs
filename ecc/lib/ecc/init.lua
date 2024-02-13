@@ -250,12 +250,26 @@ local libraries = {
 
 local libraryCachedTime = {}
 
+-- simple lazy retrieval to for sub-libraries
+-- keeps the loaded table consistent so that sub-libraries don't keep things loaded when they aren't supposed to
+local lazyLoaders = {}
+local function lazyLoad(lib, func)
+    local lazyTable
+    if lib and func then
+        lazyTable = lazyLoaders[lib..func] or setmetatable({}, {__call = function(_,...) return ecc[lib][func](...) end})
+    elseif lib then
+        lazyTable = lazyLoaders[lib] or setmetatable({}, {__index = function(_, value) return ecc[lib][value] end})
+    end
+    lazyLoaders[lib..(func or "")] = lazyTable
+    return lazyTable
+end
+
 setmetatable(ecc, {
     __index = function(self, value)
         if loaded[value] then
             return loaded[value]
         elseif libraries[value] then
-            loaded[value] = loadfile(subPath..value..".lua")(subPath..value..".lua", ecc, mapToStr, strToByteArr, byteTableMT)
+            loaded[value] = loadfile(subPath..value..".lua")(subPath..value..".lua", ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT)
             loaded[value].name = value
             libraryCachedTime[value] = computer.uptime()
             return loaded[value]
@@ -264,6 +278,7 @@ setmetatable(ecc, {
                 if arg then
                     if type(arg) =='string' then
                         loaded[arg] = nil
+                        libraryCachedTime[arg] = nil
                     elseif type(arg)=='number' then -- unload all libraries that have been loaded for longer than the time provided
                         local now = computer.uptime()
                         -- can have unintended consequences (specifically, system yield from re-loading the library if it's a dependency for another)
@@ -271,12 +286,14 @@ setmetatable(ecc, {
                         for lib, timeLoaded in pairs (libraryCachedTime) do
                             if now-timeLoaded >= arg then
                                 loaded[lib] = nil
+                                libraryCachedTime[lib] = nil
                             end
                         end
                     end
                 else
                     for i, _ in pairs (loaded) do
                         loaded[i] = nil
+                        libraryCachedTime[i] = nil
                     end
                 end
                 return true

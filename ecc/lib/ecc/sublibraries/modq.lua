@@ -1,22 +1,23 @@
-local path, ecc, mapToStr, strToByteArr, byteTableMT = ...
-if not (ecc and mapToStr and strToByteArr and byteTableMT) then
-    error(path.."is a private sublibrary of ecc, use the ecc library instead")
+local path, ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT = ...
+if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
+    error((path or "modq.lua").." is a private sublibrary of ecc, use the ecc library instead")
 end
-local arith = ecc.arith
 local unpack = table.unpack
 
 -- Arithmetic on the Finite Field of Integers modulo q
 -- Where q is the generator's subgroup order.
 local modq = {}
-local isEqual = arith.isEqual
-local compare = arith.compare
-local add = arith.add
-local sub = arith.sub
-local addDouble = arith.addDouble
-local mult = arith.mult
-local square = arith.square
-local encodeInt = arith.encodeInt
-local decodeInt = arith.decodeInt
+local random = lazyLoad("random")
+local sha256 = lazyLoad("sha256")
+local isEqual = lazyLoad("arith","isEqual")
+local compare = lazyLoad("arith", "compare")
+local add = lazyLoad("arith", "add")
+local sub = lazyLoad("arith", "sub")
+local addDouble = lazyLoad("arith", "addDouble")
+local mult = lazyLoad("arith", "mult")
+local square = lazyLoad("arith", "square")
+local encodeInt = lazyLoad("arith", "encodeInt")
+local decodeInt = lazyLoad("arith", "decodeInt")
 
 local modQMT
 
@@ -141,7 +142,7 @@ end
 
 local function randomModQ()
     while true do
-        local s = {unpack(ecc.random.random(), 1, 21)}
+        local s = {unpack(random.random(), 1, 21)}
         local result = decodeInt(s)
         if result[7] < q[7] then
             return setmetatable(result, modQMT)
@@ -150,7 +151,7 @@ local function randomModQ()
 end
 
 local function hashModQ(data)
-    return decodeModQ(ecc.sha256.digest(data))
+    return decodeModQ(sha256.digest(data))
 end
 
 modQMT = {

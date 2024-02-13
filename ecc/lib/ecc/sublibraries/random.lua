@@ -1,11 +1,11 @@
 
-local path, ecc, mapToStr, strToByteArr, byteTableMT = ...
-if not (ecc and mapToStr and strToByteArr and byteTableMT) then
-    error(path.."is a private sublibrary of ecc, use the ecc library instead")
+local path, ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT = ...
+if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
+    error((path or "random.lua").." is a private sublibrary of ecc, use the ecc library instead")
 end
 local fs = require"filesystem"
 local io = require("io")
-local sha256 = ecc.sha256
+local sha256 = lazyLoad("sha256")
 
 -- random.lua - Random Byte Generator
 local random = {}

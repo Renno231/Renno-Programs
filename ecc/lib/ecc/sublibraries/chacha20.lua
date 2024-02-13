@@ -1,6 +1,6 @@
-local path, ecc, mapToStr, strToByteArr, byteTableMT = ...
-if not (ecc and mapToStr and strToByteArr and byteTableMT) then
-    error(path.."is a private sublibrary of ecc, use the ecc library instead")
+local path, ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT = ...
+if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
+    error((path or "chacha20.lua").."is a private sublibrary of ecc, use the ecc library instead")
 end
 
 local unpack = table.unpack

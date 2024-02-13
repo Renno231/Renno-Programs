@@ -1,18 +1,17 @@
-local path, ecc, mapToStr, strToByteArr, byteTableMT = ...
-if not (ecc and mapToStr and strToByteArr and byteTableMT) then
-    error(path.."is a private sublibrary of ecc, use the ecc library instead")
+local path, ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT = ...
+if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
+    error((path or "modp.lua").." is a private sublibrary of ecc, use the ecc library instead")
 end
-local arith = ecc.arith
 local unpack = table.unpack
 
 -- Arithmetic on the finite field of integers modulo p
 -- Where p is the finite field modulus
 local modp = {}
-local add = arith.add
-local sub = arith.sub
-local addDouble = arith.addDouble
-local mult = arith.mult
-local square = arith.square
+local add = lazyLoad("arith","add")
+local sub = lazyLoad("arith","sub")
+local addDouble = lazyLoad("arith","addDouble")
+local mult = lazyLoad("arith","mult")
+local square = lazyLoad("arith","square")
 
 local p = {3, 0, 0, 0, 0, 0, 15761408}
 
