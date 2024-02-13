@@ -28,7 +28,8 @@
 -- Fix global variable declarations in modQ division and verify() (no security concerns)
 -- Small tweaks from SquidDev's illuaminate (https://github.com/SquidDev/illuaminate/)
 local os = require("os")
-local fs = require"filesystem"
+local fs = require("filesystem")
+local computer = require("computer")
 
 local ecc = {}
 local loaded = {}
@@ -247,17 +248,32 @@ local libraries = {
     sha256 = true
 }
 
+local libraryCachedTime = {}
+
 setmetatable(ecc, {
     __index = function(self, value)
         if loaded[value] then
             return loaded[value]
         elseif libraries[value] then
             loaded[value] = loadfile(subPath..value..".lua")(subPath..value..".lua", ecc, mapToStr, strToByteArr, byteTableMT)
+            loaded[value].name = value
+            libraryCachedTime[value] = computer.uptime()
             return loaded[value]
         elseif value == "unload" then
-            return function(name) 
-                if name then
-                    loaded[name] = nil
+            return function(arg) 
+                if arg then
+                    if type(arg) =='string' then
+                        loaded[arg] = nil
+                    elseif type(arg)=='number' then -- unload all libraries that have been loaded for longer than the time provided
+                        local now = computer.uptime()
+                        -- can have unintended consequences (specifically, system yield from re-loading the library if it's a dependency for another)
+                        -- the good news it that it won't break (I think)
+                        for lib, timeLoaded in pairs (libraryCachedTime) do
+                            if now-timeLoaded >= arg then
+                                loaded[lib] = nil
+                            end
+                        end
+                    end
                 else
                     for i, _ in pairs (loaded) do
                         loaded[i] = nil
@@ -275,6 +291,20 @@ setmetatable(ecc, {
                     end
                     return true    
                 end
+            end
+        elseif value == "getLoaded" then
+            return function()
+                local toReturn = {}
+                for lib, value in pairs (loaded) do
+                    local toInsert
+                    if exposedLibraries[lib] then
+                        toInsert = value
+                    else
+                        toInsert = {name = lib}
+                    end
+                    toReturn[lib] = toInsert
+                end
+                return toReturn
             end
         else
             local usable = exposedLibraries[value]
