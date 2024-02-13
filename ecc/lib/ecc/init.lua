@@ -30,7 +30,8 @@
 local os = require("os")
 local fs = require"filesystem"
 
-local ecc = {_loaded = {}}
+local ecc = {}
+local loaded = {}
 
 local function mapToStr(t)
     return type(t) == "table" and string.char(table.unpack(t)) or tostring(t)
@@ -175,59 +176,65 @@ local function deriveKeyFromPassword(password, salt, iterations) --doesn't work 
     return derivedKey
 end
 
-local function findFile(fileName, startDir)
-    checkArg(1, fileName, "string")
-    startDir = startDir or "/" -- Default start directory is root
-    
-    local dirsToVisit = startDir:find(":") and string.gmatch(startDir, "[^:]+") or {startDir}
-    while #dirsToVisit > 0 do
-        local currentDir = table.remove(dirsToVisit, 1) -- Get and remove the first element
-        if fs.exists(fs.concat(currentDir, fileName)) then
-            return fs.concat(currentDir, fileName)
-        end
-        for entry in fs.list(currentDir) do
-            local fullPath = fs.concat(currentDir, entry)
-            if fs.isDirectory(fullPath) then
-                table.insert(dirsToVisit, fullPath) -- Add directory to the list to visit
-            else
-                -- Check if the file matches the fileName with any extension
-                if entry == fileName or entry:match("^" .. fileName .. "%..+$") then
-                    return fullPath
+local selfPath = "/usr/lib/ecc/"
+local subPath = selfPath.."sublibraries/"
+if not fs.exists(subPath) then
+    local function findFile(fileName, startDir)
+        checkArg(1, fileName, "string")
+        startDir = startDir or "/" -- Default start directory is root
+        
+        local dirsToVisit = startDir:find(":") and string.gmatch(startDir, "[^:]+") or {startDir}
+        while #dirsToVisit > 0 do
+            local currentDir = table.remove(dirsToVisit, 1) -- Get and remove the first element
+            if fs.exists(fs.concat(currentDir, fileName)) then
+                return fs.concat(currentDir, fileName)
+            end
+            for entry in fs.list(currentDir) do
+                local fullPath = fs.concat(currentDir, entry)
+                if fs.isDirectory(fullPath) then
+                    table.insert(dirsToVisit, fullPath) -- Add directory to the list to visit
+                else
+                    -- Check if the file matches the fileName with any extension
+                    if entry == fileName or entry:match("^" .. fileName .. "%..+$") then
+                        return fullPath
+                    end
                 end
             end
         end
+        
+        return false, "file not found"
     end
-    
-    return false, "file not found"
-end
 
-local selfPath = findFile("ecc", "/usr")
-if not selfPath then
-    selfPath = findFile("ecc") --more expensive search
+    selfPath = findFile("ecc", "/usr")
     if not selfPath then
-        error("ECC unable to locate sub-libraries")
+        selfPath = findFile("ecc") --more expensive search
+        if not selfPath then
+            error("ECC unable to locate sub-libraries")
+        end
+    end
+
+    subPath = selfPath.."/sublibraries/"
+    if not fs.exists(subPath.."chacha20.lua") then
+        error("ECC unable to locate sub-libraries at "..subPath)
     end
 end
 
-local subPath = selfPath.."/sublibraries/"
-if not fs.exists(subPath) then
-    error("ECC unable to locate sub-libraries at "..subPath)
-end
+--available functions
+ecc.encrypt = encrypt                       --(data, key): table
+ecc.decrypt = decrypt                       --(data, key): table
+ecc.aencrypt = asymEncrypt --asymmetrical   --(publicKey, data):string
+ecc.adecrypt = asymDecrypt --asymmetrical   --(publicKey, data):string
+ecc.key = key --single key                  --(seed): string
+ecc.keypair = keypair                       --(seed): string, string
+ecc.keyFromPassword = deriveKeyFromPassword --(password, salt, iterations): string
+ecc.exchange = exchange                     --(privateKey, publicKey): string
+ecc.sign = sign                             --(privateKey, message): table
+ecc.verify = verify                         --(publicKey, message, signature): boolean
 
-local available = {
+local exposedLibraries = {
     chacha20 = true,
     sha256 = true,
-    random = true,
-    encrypt = encrypt,
-    decrypt = decrypt,
-    aencrypt = asymEncrypt, --asymmetrical
-    adecrypt = asymDecrypt, --asymmetrical
-    key = key, --single key
-    keypair = keypair,
-    keyFromPassword = deriveKeyFromPassword,
-    exchange = exchange,
-    sign = sign,
-    verify = verify,
+    random = true
 }
 
 local libraries = {
@@ -242,23 +249,38 @@ local libraries = {
 
 setmetatable(ecc, {
     __index = function(self, value)
-        if self._loaded[value] then
-            return self._loaded[value]
+        if loaded[value] then
+            return loaded[value]
         elseif libraries[value] then
-            self._loaded[value] = loadfile(subPath..value..".lua")(subPath..value..".lua", ecc, mapToStr, strToByteArr, byteTableMT)
-            return self._loaded[value]
+            loaded[value] = loadfile(subPath..value..".lua")(subPath..value..".lua", ecc, mapToStr, strToByteArr, byteTableMT)
+            return loaded[value]
         elseif value == "unload" then
-            return function() 
-                for i, _ in pairs (self._loaded) do
-                    self._loaded[i] = nil
+            return function(name) 
+                if name then
+                    loaded[name] = nil
+                else
+                    for i, _ in pairs (loaded) do
+                        loaded[i] = nil
+                    end
                 end
+                return true
             end
         elseif value == "load" then
-
+            return function(name)
+                if name then
+                    return libraries[name] and ecc[name]
+                else
+                    for library, _ in pairs (libraries) do
+                        _ = ecc[library]
+                    end
+                    return true    
+                end
+            end
         else
-            local usable = available[value]
-            if type(usable) == 'boolean' then
+            local usable = exposedLibraries[value]
+            if usable then
                 usable = ecc.value
+                rawset(ecc, value, usable)
             end
             return usable
         end
