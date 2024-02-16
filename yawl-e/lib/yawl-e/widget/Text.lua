@@ -211,6 +211,7 @@ function Text:_parse(override)
     self:_calculateHighlights()
 end
 
+--need to make it to where this can be done by match for * lines, or for a specified line
 function Text:_calculateHighlights()
     if not self._textHighlights then return false end
     self._textHighlightResults = {}
@@ -326,6 +327,7 @@ end
 
 
 function Text:draw()
+    -- could optimize this somewhat with a :isAsciiArt() method, which would basically just do a gpu.set directly and skip clipping checks
     if not self:visible() then return end
     local isBordered = self:bordered()
     local x, y = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0)
@@ -369,6 +371,7 @@ function Text:draw()
                 relativeX = (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or 
                             (xAlign == "right" and (xSection-unicode.len(str))) or 
                             0
+                relativeX = math.floor(0.5 + relativeX)
                 relativeY = i-1
                 if yStart+relativeY >= y then
                     self:_gpuset(xStart+relativeX, yStart+relativeY, str)
@@ -379,10 +382,14 @@ function Text:draw()
             str = self._parsedText[i]
         end
     else
-        local str = self._text:gsub("\n","")
+        local str = self._text:gsub("\n","") --should probably store as self._flatText
         local relativeX =   (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or 
                             (xAlign == "right" and (xSection-unicode.len(str))) or 
                             0
+        if unicode.len(str)==width and xAlign == "center" then 
+            xStart, relativeX = x, 0
+        end
+        -- if unicode.len(str) == width then relativeX = 0 end
         self:_gpuset(xStart + relativeX, y, str)
     end
     if self._textHighlightResults then
