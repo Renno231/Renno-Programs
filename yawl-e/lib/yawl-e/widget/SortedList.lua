@@ -59,7 +59,7 @@ function SortedList:insert(value, index)
     checkArg(1, value, 'table', 'boolean', 'number', 'string')
     checkArg(1, index, 'number', 'nil')
     if type(value) == 'table' then
-        for _,v in ipairs (self._list) do
+        for _,v in pairs (self._list) do
             if v == value then
                 return false, 'table already inserted'
             end
@@ -267,24 +267,42 @@ function SortedList:draw() --could make it check to see if its hitting the borde
     if filterValue == "" then filterValue = nil end
 
     local i, scrollIndex, listValue = 1, self:scroll()
-    repeat
-        local index = i + scrollIndex
-        listValue = self._list[index] 
-        if not listValue then break end
-        if filterFunc and filterValue then
-            local succ, returned = pcall(filterFunc, filterValue, listValue)
-            if succ then
-                if returned~=nil and returned~=false then
-                    table.insert(self._shown, index)
+    for i, v in pairs (self._list) do
+        if #self._shown > height then break end
+        if type(i)=='number' and i>=scrollIndex then
+            if filterFunc and filterValue then
+                local succ, returned = pcall(filterFunc, filterValue, listValue)
+                if succ then
+                    if returned~=nil and returned~=false then
+                        table.insert(self._shown, i)
+                    end
+                elseif self._showsErrors then
+                    table.insert(self._shown, tostring(i).." (filter)"..returned)
                 end
-            elseif self._showsErrors then
-                table.insert(self._shown, tostring(index).." (filter)"..returned)
+            else
+                table.insert(self._shown, i)
             end
-        else
-            table.insert(self._shown, index)
         end
-        i=i+1
-    until listValue == nil or #self._shown > height --go to at most 1 over
+    end
+    -- efficient, but not wholly effective
+    -- repeat
+    --     local index = i + scrollIndex
+    --     listValue = self._list[index] 
+    --     if not listValue then break end
+    --     if filterFunc and filterValue then
+    --         local succ, returned = pcall(filterFunc, filterValue, listValue)
+    --         if succ then
+    --             if returned~=nil and returned~=false then
+    --                 table.insert(self._shown, index)
+    --             end
+    --         elseif self._showsErrors then
+    --             table.insert(self._shown, tostring(index).." (filter)"..returned)
+    --         end
+    --     else
+    --         table.insert(self._shown, index)
+    --     end
+    --     i=i+1
+    -- until listValue == nil or #self._shown > height --go to at most 1 over
     
     local formatFunc, isNumbered = self:format(), self:numbered()
     local linePrefix = "%+"..tostring(tostring(#self._shown):len()).."s:%+"..tostring(tostring(#self._list):len()).."s "
