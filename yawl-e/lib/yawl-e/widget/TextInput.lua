@@ -1,53 +1,120 @@
 local event = require("event")
-local wrap = require("yawl-e.util").wrap
+local unicode = require("unicode")
 local class = require("libClass2")
 local Text = require("yawl-e.widget.Text")
 local gpu = require("component").gpu
+local computer = require"computer"
 
 --[[
     TODO
-        cursor
-            should it be a full space blink that inverts the color of the character it overlaps?
-            should it be a | or similar character that it flips between with the character it overlaps?
-        
+        need to account for 1 height input object
         add listener for paste event
+        add auto-scroll and auto-size in _onKeyDown
+            :scrollWithCursor()
+            :dynamicWidth()
+            :dynamicHeight()
+            :minimumWidth()
+            :minimumHeight()
+            :widthRange()
+            :heightRange()
+            :maximumWidth()
+            :maximumHeight() 
+        fix/finish goofy behavior in _onKeyDown
 ]]
 
 ---@class TextInput:Text
 ---@field private _listeners.keyDownEvent number
 ---@field private _listeners.touchEvent number
----@field private _placeHolderChar string
 ---@operator call:TextInput
 ---@overload fun(parent:Frame,x:number,y:number,text:string,foregroundColor:number):TextInput
 local TextInput = class(Text)
 
----@param value? string
----@return string
-function TextInput:placeholder(value)
-    checkArg(1, value, 'string', 'nil')
-    local oldValue = self._placeholder
-    if (value) then self._placeholder = value end
-    return oldValue
-end
-
 function TextInput:_onKeyDown(eventName, component, char, key, player)
-    if (eventName ~= "key_down") then return end
-    if (char == 8) then                                --backspace
-        self:text(string.sub(self:text(), 0, -2))
-    elseif (char == 13 and not self:multilines()) then --return
-        event.cancel(self._listeners.keyDownEvent)
-        self._listeners.keyDownEvent = nil
-        self._player = nil
-        event.cancel(self._listeners.touchEvent)
-        self._listeners.touchEvent = nil
+    if (char == 8 or key == 211) then --backspace & delete
+        local cX, cY = self:cursorXY()
+        local index = self:cursor()- (cY > 1 and 1 or 0)
+        local cText = self:text()
+        local cLength = unicode.len(cText)
+        local lineLength = unicode.len(self._parsedText[cY])
+        if cLength > 1 then
+            if char == 8 then --broken backspace
+                if not (cX == 1 and index == 1) then
+                    local stayLine = lineLength == 1
+                    
+                    -- if self._debug then self._debug:text(require"computer".uptime(), cX, lineLength+1, cX <= lineLength+1 ) end
+                    if cX <= lineLength+1 then
+                        self:text(
+                            unicode.sub(cText, 0, index - (cX == lineLength+1 and 2 or 1 )) .. unicode.sub(cText, index + 1)
+                        )
+                    end
+                        -- require"component".ocelot.log(string.format("%s %s", cX, lineLength))
+                    -- end
+                    if cX == 2 and stayLine then
+                        table.insert(self._parsedText, "")
+                    end
+                    if cX==1 or (self._parsedText[cY] == "" and not stayLine) then
+                        cY = cY - 1
+                        cX = unicode.len(self._parsedText[cY])+1
+                    end
+                    self:cursor(cX - 1, cY)
+                end
+            else -- delete
+                -- local endLine =
+                self:text(unicode.sub(cText, 0, index ) .. unicode.sub(cText, index + 2))
+                -- if ( lineLength==cX or index == cLength) and cX > 1 then
+                    -- self:cursor(cX-1, cY)
+                -- end
+            end
+        else
+            self:text("")
+            self:cursor(1)
+        end
+    elseif (char==0 and (key==200 or key==203 or key == 205 or  key == 208)) then --arrow keys
+        local cX, cY = self:cursorXY()
+        if key == 200 then cY = cY - 1 end  -- Up
+        if key == 208 then cY = cY + 1 end  -- Down
+        if key == 203 then cX = cX - 1 end  -- Left
+        if key == 205 then cX = cX + 1 end  -- Right
+        -- if key == 203 then
+        --     self:cursor(self:cursor() - 1)
+        -- else
+            self:cursorXY(cX, cY)
+        -- end
+    elseif (char == 13) then --return
+        if self:multilines() then
+            local index = self:cursor()
+            local cX, cY = self:cursorXY()
+            local cText = self:text()
+            self:text(unicode.sub(cText, 0, index-1) .. "\n" .. unicode.sub(cText, index))
+            table.insert(self._parsedText,"")
+            self:cursorXY(1, cY+1)
+        else
+            event.cancel(self._listeners.keyDownEvent)
+            self._listeners.keyDownEvent = nil
+            self._player = nil
+            event.cancel(self._listeners.touchEvent)
+            self._listeners.touchEvent = nil
+        end
     elseif char>=32 and char<=126 then --normal characters
-        self:text(self:text() .. string.char(char))
+        local cX, cY = self:cursorXY()
+        local index = self:cursor() - (cY > 1 and 1 or 0)
+        local cText = self:text()
+        -- if cX == 1 then index = index - 1 end
+        self:text(unicode.sub(cText, 0, index) .. string.char(char) .. unicode.sub(cText, index + 1))
+        if cX+1 > unicode.len(self._parsedText[cY]) then cY = cY + 1 end
+        self:cursor(cX + 1, cY)
+        -- ^ needs work
+        -- if self._debug then self._debug:text(require"computer".uptime(),"normal key", self:text()) end
     end
+    local cX, cY = self:cursorXY()
+    local ctext = self:text()
+    if self._debug then self._debug:text(require"computer".uptime(),"cursor(i,x,y):",self:cursor(), cX, cY,"|length:",unicode.len(ctext), unicode.charAt(ctext, self:cursor())) end
 end
 
 function TextInput:clearOnEnter(should)
     checkArg(1, should, 'boolean', 'nil')
-    local oldValue = self._clearOnEnter or false
+    local oldValue = self._clearOnEnter 
+    if oldValue == nil then self._clearOnEnter = false end
     if (should ~= nil) then self._clearOnEnter = should end
     return oldValue
 end
@@ -76,6 +143,8 @@ function TextInput:defaultCallback(_, eventName, uuid, x, y, button, playerName)
                 if (self._listeners.touchEvent) then event.cancel(self._listeners.touchEvent --[[@as number]]) end
                 self._listeners.touchEvent = nil
                 if self:clearOnEnter() then self:text("") end
+            -- else
+                --check for x,y and move cursor accordingly
             end
         end) --[[@as number]]
     end
@@ -87,19 +156,93 @@ end
 function TextInput:multilines(value)
     checkArg(1, value, 'boolean', 'nil')
     local oldValue = self._multilines or false
+    if self._multilines == nil and self:height() > 1 then oldValue = true end
     if (value ~= nil) then self._multilines = value end
     return oldValue
 end
 
-function TextInput:cursor(x,y) --if x and y, x specifies the char on the line y points to, if just x, it's the char at the index in the normal string
+function TextInput:_parse(override)
+    checkArg(1, override, 'number', 'nil')
+    local width = self:width()
+    local xOff, yOff = self:textOffset()
+    self._parsedText = {} --wrap(self:text(), override or self:wrapWidth() or (width - (((xOff or 0)+1) * math.floor(0.5 + width / 3)) ))
+    local wrappedWith = override or self:wrapWidth() or (width - (((xOff or 0)+1) * math.floor(0.5 + width / 3)) )
+    local inputText = self:text()
+    for i=1, math.ceil(unicode.len(inputText)/wrappedWith) do
+        table.insert(self._parsedText, unicode.sub(inputText, (i-1) * wrappedWith + 1, i*wrappedWith))
+    end
+
+    self:_calculateHighlights()
+end
+
+function TextInput:cursor(x, y) --if x and y, x specifies the char on the line y points to, if just x, it's the char at the index in the normal string
+    checkArg(1, x, 'number', 'nil')
+    checkArg(2, y, 'number', 'nil')
+    local oldValue = self._cursor and self._cursor.index or 0
+    if x and y then
+        self:cursorXY(x, y)
+    elseif x then
+        x = math.max(1, x)
+        self._cursor = self._cursor or {}
+        local totalLength = 0
+        local targetLine = 1
+        local targetColumn = x
+
+        -- Iterate through each line to find the line and column corresponding to x.
+        for i, line in ipairs(self._parsedText) do
+            local lineLength = unicode.len(line)
+            if totalLength + lineLength >= x then
+                -- Calculate column relative to this line, adjust for 1-based indexing.
+                targetLine, targetColumn = i, x - totalLength
+                break
+            end
+            totalLength = totalLength + lineLength + 1  -- Assuming newline characters between lines.
+        end
+
+        -- Ensure the targetColumn does not exceed the length of the line.
+        targetColumn = math.min(targetColumn, unicode.len(self._parsedText[targetLine]))
+
+        -- Update the cursor position.
+        self:cursorXY(targetColumn, targetLine)
+    end
+    return oldValue
+end
+
+function TextInput:cursorXY(x,y) --if x and y, x specifies the char on the line y points to
     checkArg(1, x, 'number', 'nil')
     checkArg(1, y, 'number', 'nil')
-    
+    local oldValueY = self._cursor and self._cursor.y or 1
+    local oldValueX = self._cursor and self._cursor.x or 1
+    if x and y then
+        self._cursor = self._cursor or {}
+        -- Ensure y is within the bounds of the text.
+        y = math.max(1, math.min(y, #self._parsedText))
+        -- Ensure x is within the bounds of the line, including handling lines without a trailing newline.
+        local lineLength = unicode.len(self._parsedText[y])
+        --need to check against the wrap width here
+        x = math.max(1, math.min(x, lineLength + (lineLength > 0 and 1 or 0)))
+
+        self._cursor.y = y
+        self._cursor.x = x
+
+        -- Recalculate the cursor index based on the new x and y.
+        local newIndex = 0
+        for i = 1, y - 1 do
+            newIndex = newIndex + unicode.len(self._parsedText[i])  + 1
+        end
+        self._cursor.index = math.max(newIndex + x - 1, 0)
+    end
+    return oldValueX, oldValueY
 end
 
+local defaultCursor = unicode.char(0x23B8)
 function TextInput:cursorChar(char)
-
+    checkArg(1, char, 'boolean', 'nil')
+    local oldValue = self._cursorchar or false
+    if (char ~= nil) then self._cursorchar = char end
+    return oldValue
 end
+
 
 function TextInput:append(str) --inserts at the current cursor position
 
@@ -110,46 +253,105 @@ function TextInput:backspace(num) --how many characters to the left or right of 
 end
 
 function TextInput:cursorBlinks(bool) --yes or no
-    
+    checkArg(1, bool, 'boolean', 'nil')
+    local oldValue = self._shouldblink
+    if oldValue == nil then oldValue = true end
+    if (bool ~= nil) then self._shouldblink = bool end
+    return oldValue
 end
 
 function TextInput:cursorBlinkTime(num) --some amount of time inbetween blinks, default 1
-
+    checkArg(1, num, 'number', 'nil')
+    local oldValue = self._blinkTime or 1
+    if num then self._blinkTime = num end
+    return oldValue
 end
 
 function TextInput:getLine(x, y) --returns the string that's currently displayed (at the specified position if provideed)
 
 end
 
-function TextInput:draw()
-    if (not self:visible()) then return end
-    local oldFgColor = gpu.setForeground(self:foregroundColor())
-    local oldBgColor = gpu.getBackground()
-    if (self:backgroundColor()) then
-        gpu.setBackground(self:backgroundColor())
-        self:_gpufill(self:absX(), self:absY(), self:width(), self:height(), " ")
+function TextInput:deleteLine(y) --uses cursor Y if not provided
+
+end
+
+function TextInput:draw()if not self:visible() then return end
+    local isBordered = self:bordered()
+    local x, y, width, height = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0), self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
+    local maxWidth, maxHeight --= self:maxWidth(), self:maxHeight()
+    if height == 0 or width == 0 then return end
+    local oldBG, oldFG = gpu.getBackground(), gpu.getForeground()
+    local parent = self:getParent()
+    local newBG, newFG = self:backgroundColor() or (parent and parent:backgroundColor()), self:foregroundColor()
+    if newBG then  --could use self:parent():backgroundColor()
+        gpu.setBackground(newBG)
+        self:_gpufill(x, y, width, height, " ", true)
     end
-    local y, maxWidth = self:absY(), self:maxWidth()
-    for i, line in ipairs(wrap(self:text(), maxWidth)) do
-        ---@cast line string
-        if ((y - self:absY()) + 1 <= self:maxHeight()) then
-            local x = self:absX()
-            --[[if (self:center() and self:minWidth() == self:maxWidth()) then
-                x = x + (self:width() - #line) / 2
-            end]]
-            for c in line:gmatch(".") do
-                local s, _, _, bg = pcall(gpu.get, x, y)
-                if (s ~= false) then
-                    gpu.setBackground(bg)
-                    self:_gpuset(x, y, self:placeholder() or c)
-                    x = x + 1
+    if newFG then gpu.setForeground(newFG) end
+
+    local textheight = #self._parsedText
+    local xScroll, yScroll = self:scrollX(), self:scrollY()
+    local xOff, yOff = self:textOffset()
+    local xSection = math.floor(0.5 + width  / 3)
+    local ySection = math.floor(0.5 + height / 3)
+    local xAlign, yAlign = self:textHorizontalAlignment(), self:textVerticalAlignment()
+    local xStart, yStart = xScroll + x+(xOff+1)*xSection, 
+        ((yAlign == "center" and 0.5*(ySection-textheight)) or
+        (yAlign == "bottom" and (ySection-textheight)) or 0) ---
+        + (yScroll + y + ((yOff+1) * ySection))
+        
+    if ( height%2>0 and textheight%2>0 and yOff == 0) or (not isBordered and yOff == 1 and (height-1)%3==0) then 
+        yStart = yStart + 1
+    end
+    --ugly and complicated, but it seems to work
+    local blinkTime = self:cursorBlinkTime()
+    local cursorBlinks, cursorChar = self:cursorBlinks(), self:cursorChar()
+    local cursorX, cursorY = self:cursorXY()
+    if height > 1 or textheight > 1 then
+        local i, relativeX, relativeY, maxY = 1, 0, 0, y+height
+        local str = self._parsedText[i]
+        local currentY = yStart+relativeY
+        while currentY+1 < maxY and str and yStart+textheight>=y do
+            if str then
+                relativeX, relativeY = (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or (xAlign == "right" and (xSection-unicode.len(str)-1)) or 0, i-1
+                currentY = yStart+relativeY
+                if currentY >= y then
+                    self:_gpuset(xStart+relativeX, currentY, str, true)
+                    if self._listeners.keyDownEvent and i == cursorY then
+                        --cursorBlinks, uses time to optionally show cursor, otherwise always shows
+                        if newBG then gpu.setBackground(0xffffff-newBG) end
+                        if str then
+                            cursorChar = unicode.charAt(str, cursorX)
+                        end
+                        local now = computer.uptime()
+                        if cursorBlinks then
+                            if (now-(self._lastBlinked or 0))>=blinkTime then
+                                self._lastBlinked = now
+                                self._blinkBoolean = not self._blinkBoolean 
+                            end
+                            if self._blinkBoolean then
+                                cursorChar = defaultCursor
+                            end
+                        end
+                        if cursorChar == "" or cursorChar == " " or cursorChar == nil then 
+                            cursorChar = defaultCursor
+                        end
+                        
+                        self:_gpuset(xStart + relativeX + cursorX - 1, currentY, cursorChar, true )
+                        gpu.setBackground(newBG or oldBG)
+                    end
                 end
+                i=i+1
             end
+            str = self._parsedText[i]
         end
-        y = y + 1
+    else
+        local str = self:text():gsub("\n","")
+        self:_gpuset(x, y, str, true)
     end
-    gpu.setForeground(oldFgColor)
-    gpu.setBackground(oldBgColor)
+
+    gpu.setForeground(oldFG)
+    gpu.setBackground(oldBG)
     return true
 end
 
