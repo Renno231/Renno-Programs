@@ -238,10 +238,11 @@ function Widget:bordered(value)
     return oldValue
 end
 
-function Widget:_borderOverride(value)
+function Widget:borderUsesBackground(value)
     checkArg(1, value, 'boolean', 'nil')
-    local oldValue = self._borderoverride
-    if (value ~= nil) then self._borderoverride = value end
+    local oldValue = self._borderUsesBGColor
+    if oldValue == nil then oldValue = true end
+    if (value ~= nil) then self._borderUsesBGColor = value end
     return oldValue
 end
 
