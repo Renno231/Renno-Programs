@@ -50,19 +50,29 @@ end
 
 ---@param value? number
 ---@return number
-function SliderBar:min(value)
-    checkArg(1, value, 'number', 'nil')
+function SliderBar:min(minimum)
+    checkArg(1, minimum, 'number', 'nil')
     local oldValue = self._min
-    if (value ~= nil) then self._min = value end
+    if (minimum ~= nil) then 
+        self._min = minimum 
+        if self._value and minimum > self._value then
+            self._value = minimum
+        end
+    end
     return oldValue
 end
 
 ---@param value? number
 ---@return number
-function SliderBar:max(value) --need to make sure it is higher than the minimum
-    checkArg(1, value, 'number', 'nil')
+function SliderBar:max(maximum) --need to make sure it is higher than the minimum
+    checkArg(1, maximum, 'number', 'nil')
     local oldValue = self._max
-    if (value ~= nil) then self._max = value end
+    if (maximum ~= nil) then 
+        self._max = maximum 
+        if self._value and maximum < self._value then
+            self._value = maximum
+        end 
+    end
     return oldValue
 end
 
@@ -83,14 +93,18 @@ function SliderBar:adjust(value)
     return self:value(self:value() + value)
 end
 
-function SliderBar:defaultCallback(_, eventName, _, x)
-    if (eventName ~= 'drag' and eventName ~= 'touch') then return end
-    local t = x - self:absX() --technically this should be + 1
-    local b = self:width() - 1 --and this shouldn't be changed
-    local c, d = self:range()
-    --math.round = function(a) return math.floor(a+0.5) end
-    self:value(math.floor((c + ((d - c) / b ) * t) + 0.5))
-    return true
+function SliderBar:defaultCallback(_, eventName, uuid, x, y, button, playerName)
+    if eventName == 'drag' or eventName == 'touch' then
+        local t = x - self:absX() --technically this should be + 1
+        local b = self:width() - 1 --and this shouldn't be changed
+        local c, d = self:range()
+        --math.round = function(a) return math.floor(a+0.5) end
+        self:value(math.floor((c + ((d - c) / b ) * t) + 0.5))
+        return true
+    elseif eventName == "scroll" then
+        local old = self:adjust(button)
+        return old == self:value() --true
+    end
 end
 
 function SliderBar:draw()
