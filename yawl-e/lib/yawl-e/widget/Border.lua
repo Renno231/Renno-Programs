@@ -23,7 +23,7 @@ function Border:new(parent, x, y, borderset)
     setmetatable(o, {__index = self})
     o:borderSet(borderset)
     o:bordered(true)
-    o:_borderOverride(true)
+    o._borderoverride = true
     o:autoFit(true, true)
     ---@cast o Border
     return o
