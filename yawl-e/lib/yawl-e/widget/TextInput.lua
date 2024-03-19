@@ -7,7 +7,6 @@ local computer = require"computer"
 
 --[[
     TODO
-        need to account for 1 height input object
         add listener for paste event
         add auto-scroll and auto-size in _onKeyDown
             :scrollWithCursor()
@@ -19,7 +18,7 @@ local computer = require"computer"
             :heightRange()
             :maximumWidth()
             :maximumHeight() 
-        fix/finish goofy behavior in _onKeyDown
+        fix/finish goofy behavior in _onKeyDown (which is nothing but agony)
 ]]
 
 ---@class TextInput:Text
@@ -30,56 +29,47 @@ local computer = require"computer"
 local TextInput = class(Text)
 
 function TextInput:_onKeyDown(eventName, component, char, key, player)
+    local cText = self:text()
+    local cLength = unicode.len(cText)
     if (char == 8 or key == 211) then --backspace & delete
         local cX, cY = self:cursorXY()
         local index = self:cursor()- (cY > 1 and 1 or 0)
-        local cText = self:text()
-        local cLength = unicode.len(cText)
         local lineLength = unicode.len(self._parsedText[cY])
-        if cLength > 1 then
-            if char == 8 then --broken backspace
-                if not (cX == 1 and index == 1) then
-                    local stayLine = lineLength == 1
-                    
-                    -- if self._debug then self._debug:text(require"computer".uptime(), cX, lineLength+1, cX <= lineLength+1 ) end
-                    if cX <= lineLength+1 then
-                        self:text(
-                            unicode.sub(cText, 0, index - (cX == lineLength+1 and 2 or 1 )) .. unicode.sub(cText, index + 1)
-                        )
-                    end
-                        -- require"component".ocelot.log(string.format("%s %s", cX, lineLength))
-                    -- end
-                    if cX == 2 and stayLine then
-                        table.insert(self._parsedText, "")
-                    end
-                    if cX==1 or (self._parsedText[cY] == "" and not stayLine) then
+        if cLength > 0 then -- not too sure yet how good this is with multiline support but it fixed single line
+            local cX, cY = self:cursorXY()
+            local index = self:cursor() - (cY > 1 and 1 or 0)
+        
+            if char == 8 then -- Backspace
+                if cX > 1 or cY > 1 then
+                    local prevLineLen = cY > 1 and unicode.len(self._parsedText[cY - 1]) or 0
+                    self:text(unicode.sub(cText, 1, index - 1) .. unicode.sub(cText, index + 1))
+                    if cX == 1 then
                         cY = cY - 1
-                        cX = unicode.len(self._parsedText[cY])+1
+                        cX = prevLineLen + 1
+                    else
+                        cX = cX - 1
                     end
-                    self:cursor(cX - 1, cY)
                 end
-            else -- delete
-                -- local endLine =
-                self:text(unicode.sub(cText, 0, index ) .. unicode.sub(cText, index + 2))
-                -- if ( lineLength==cX or index == cLength) and cX > 1 then
-                    -- self:cursor(cX-1, cY)
-                -- end
+            elseif key == 211 then -- Delete
+                if index < cLength then -- Check to avoid deleting when at end
+                    self:text(unicode.sub(cText, 1, index) .. unicode.sub(cText, index + 2))
+                    -- No need to adjust cX for delete as the cursor stays in place
+                end
             end
-        else
-            self:text("")
-            self:cursor(1)
+            self:cursorXY(cX, cY)
         end
     elseif (char==0 and (key==200 or key==203 or key == 205 or  key == 208)) then --arrow keys
         local cX, cY = self:cursorXY()
-        if key == 200 then cY = cY - 1 end  -- Up
-        if key == 208 then cY = cY + 1 end  -- Down
-        if key == 203 then cX = cX - 1 end  -- Left
-        if key == 205 then cX = cX + 1 end  -- Right
-        -- if key == 203 then
-        --     self:cursor(self:cursor() - 1)
-        -- else
-            self:cursorXY(cX, cY)
-        -- end
+        if key == 203 then -- Left
+            cX = math.max(1, cX - 1)
+        elseif key == 205 then -- Right
+            cX = math.min(unicode.len(self._parsedText[cY]) + 1, cX + 1)
+        elseif key == 200 then -- Up
+            cY = math.max(1, cY - 1)
+        elseif key == 208 then -- Down
+            cY = math.min(#self._parsedText, cY + 1)
+        end
+        self:cursorXY(cX, cY)
     elseif (char == 13) then --return
         if self:multilines() then
             local index = self:cursor()
@@ -96,19 +86,20 @@ function TextInput:_onKeyDown(eventName, component, char, key, player)
             self._listeners.touchEvent = nil
         end
     elseif char>=32 and char<=126 then --normal characters
-        local cX, cY = self:cursorXY()
-        local index = self:cursor() - (cY > 1 and 1 or 0)
-        local cText = self:text()
-        -- if cX == 1 then index = index - 1 end
-        self:text(unicode.sub(cText, 0, index) .. string.char(char) .. unicode.sub(cText, index + 1))
-        if cX+1 > unicode.len(self._parsedText[cY]) then cY = cY + 1 end
-        self:cursor(cX + 1, cY)
-        -- ^ needs work
-        -- if self._debug then self._debug:text(require"computer".uptime(),"normal key", self:text()) end
+        if (self:height() == 1 and cLength < self:width()) or self:height() > 1 then
+            local cX, cY = self:cursorXY()
+            local index = self:cursor() - (cY > 1 and 1 or 0)
+            local cText = self:text()
+            -- if cX == 1 then index = index - 1 end
+            self:text(unicode.sub(cText, 0, index) .. string.char(char) .. unicode.sub(cText, index + 1))
+            if cX+1 > unicode.len(self._parsedText[cY]) then cY = cY + 1 end
+            self:cursor(cX + 1, cY)
+        end
     end
-    local cX, cY = self:cursorXY()
-    local ctext = self:text()
-    if self._debug then self._debug:text(require"computer".uptime(),"cursor(i,x,y):",self:cursor(), cX, cY,"|length:",unicode.len(ctext), unicode.charAt(ctext, self:cursor())) end
+    -- self._debug:text(self:text())
+    -- local cX, cY = self:cursorXY()
+    -- local ctext = self:text()
+    -- if self._debug then self._debug:text(require"computer".uptime(),"cursor(i,x,y):",self:cursor(), cX, cY,"|length:",unicode.len(ctext), unicode.charAt(ctext, self:cursor())) end
 end
 
 function TextInput:clearOnEnter(should)
@@ -143,10 +134,11 @@ function TextInput:defaultCallback(_, eventName, uuid, x, y, button, playerName)
                 if (self._listeners.touchEvent) then event.cancel(self._listeners.touchEvent --[[@as number]]) end
                 self._listeners.touchEvent = nil
                 if self:clearOnEnter() then self:text("") end
-            -- else
-                --check for x,y and move cursor accordingly
             end
         end) --[[@as number]]
+    end
+    if self:height() == 1 and button == 0 then -- not finished for multiline support
+        self:cursorXY(x - self:absX() + 1, 1)
     end
     return true
 end
@@ -231,6 +223,9 @@ function TextInput:cursorXY(x,y) --if x and y, x specifies the char on the line 
             newIndex = newIndex + unicode.len(self._parsedText[i])  + 1
         end
         self._cursor.index = math.max(newIndex + x - 1, 0)
+        if self._cursor.y ~= oldValueY or self._cursor.x ~= oldValueX then
+            self:invokeCallback("cursorChanged", self._cursor.index, x, y)
+        end
     end
     return oldValueX, oldValueY
 end
@@ -303,15 +298,16 @@ function TextInput:draw()if not self:visible() then return end
     if ( height%2>0 and textheight%2>0 and yOff == 0) or (not isBordered and yOff == 1 and (height-1)%3==0) then 
         yStart = yStart + 1
     end
+    -- if textheight == 0 then return end
     --ugly and complicated, but it seems to work
     local blinkTime = self:cursorBlinkTime()
     local cursorBlinks, cursorChar = self:cursorBlinks(), self:cursorChar()
     local cursorX, cursorY = self:cursorXY()
-    if height > 1 or textheight > 1 then
+    -- if height > 1 or textheight > 1 then
         local i, relativeX, relativeY, maxY = 1, 0, 0, y+height
         local str = self._parsedText[i]
         local currentY = yStart+relativeY
-        while currentY+1 < maxY and str and yStart+textheight>=y do
+        while (currentY+(textheight>1 and 1 or 0)) < maxY and str and yStart+textheight>=y do
             if str then
                 relativeX, relativeY = (xAlign == "center" and 0.5*(xSection-unicode.len(str))) or (xAlign == "right" and (xSection-unicode.len(str)-1)) or 0, i-1
                 currentY = yStart+relativeY
@@ -319,15 +315,16 @@ function TextInput:draw()if not self:visible() then return end
                     self:_gpuset(xStart+relativeX, currentY, str, true)
                     if self._listeners.keyDownEvent and i == cursorY then
                         --cursorBlinks, uses time to optionally show cursor, otherwise always shows
-                        if newBG then gpu.setBackground(0xffffff-newBG) end
                         if str then
                             cursorChar = unicode.charAt(str, cursorX)
+                            if newFG and (cursorChar~=" " and cursorChar~="") then gpu.setBackground(0xffffff-newFG) end
                         end
                         local now = computer.uptime()
                         if cursorBlinks then
                             if (now-(self._lastBlinked or 0))>=blinkTime then
                                 self._lastBlinked = now
-                                self._blinkBoolean = not self._blinkBoolean 
+                                self._blinkBoolean = not self._blinkBoolean
+                                self:invokeCallback("cursorBlinked", self._blinkBoolean)
                             end
                             if self._blinkBoolean then
                                 cursorChar = defaultCursor
@@ -337,6 +334,7 @@ function TextInput:draw()if not self:visible() then return end
                             cursorChar = defaultCursor
                         end
                         
+                        -- 
                         self:_gpuset(xStart + relativeX + cursorX - 1, currentY, cursorChar, true )
                         gpu.setBackground(newBG or oldBG)
                     end
@@ -345,10 +343,10 @@ function TextInput:draw()if not self:visible() then return end
             end
             str = self._parsedText[i]
         end
-    else
-        local str = self:text():gsub("\n","")
-        self:_gpuset(x, y, str, true)
-    end
+    -- else
+    --     local str = self:text():gsub("\n","")
+    --     self:_gpuset(x, y, str, true)
+    -- end
 
     gpu.setForeground(oldFG)
     gpu.setBackground(oldBG)
