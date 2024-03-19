@@ -30,6 +30,7 @@ function TextButton:width(width)
         self._size.width = width
         self:wrapWidth(width)
         self:_parse()
+        self:invokeCallback("widthChanged", oldValue, width)
     end
     return oldValue
 end

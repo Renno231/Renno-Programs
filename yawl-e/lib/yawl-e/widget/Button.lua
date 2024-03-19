@@ -20,6 +20,7 @@ function Button:activate(state)
         if state then 
             self._pressed = computer.uptime()
         end
+        self:invokeCallback("stateChanged", state)
     end
     return oldValue
 end

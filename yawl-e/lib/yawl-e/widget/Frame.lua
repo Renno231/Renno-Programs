@@ -87,6 +87,7 @@ end
 ---@param containerChild Widget|Frame
 function Frame:addChild(containerChild)
     table.insert(self._childs, containerChild)
+    self:invokeCallback("childAdded", containerChild)
 end
 
 ---Remove a child from the container. Return the removed child on success
@@ -99,6 +100,7 @@ function Frame:removeChild(child)
         if (v == child) then childId = i break end
     end
     if (childId > 0) then
+        self:invokeCallback("childRemoved", self._childs[childId])
         table.remove(self._childs, childId)
         return child
     end
@@ -108,6 +110,7 @@ function Frame:clearChildren()
     for _, element in ipairs(self._childs) do
         element:Destroy(true)
     end
+    self:invokeCallback("clearedChildren")
     self._childs = {}
     return true
 end
@@ -244,8 +247,10 @@ function Frame:draw()
     else
         self:_gpufill(x, y, width, height, " ", true)
     end
-    if not self._childs then return false end
-    if #self._childs == 0 then return end
+    if not self._childs or #self._childs == 0 then
+        return self.drawBorder and self:drawBorder() or false
+    end
+        
     --sort widgets by z
     self:_sort()
     local isRoot = self:getParent() == nil
@@ -258,13 +263,16 @@ function Frame:draw()
             element:_tweenStep()
         end
     end
-    for _, element in pairs(self._childs) do
+    for _, element in pairs(self._childs) do --could (technically *should*) have error handling here
         element[tweenOrWeld](element)
-        if element:draw() and element.drawBorder and not element._borderoverride then 
+        local noDrawError, drawReturn = pcall(element.draw, element)
+        
+        if noDrawError and drawReturn==true and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end
     end
-    if isRoot and self.drawBorder and not self._borderoverride then self:drawBorder() end
+    
+    if self.drawBorder and not self._borderoverride then self:drawBorder() end
     --might need to call self:drawBorder() like for the elements ^
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)

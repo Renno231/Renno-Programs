@@ -13,6 +13,7 @@ local Widget = require("libClass2")()
 local gpu = require("component").gpu
 local unicode = require("unicode")
 local event = require("event")
+local component = require"component"
 
 function Widget:defaultCallback()
 end
@@ -98,7 +99,12 @@ end
 function Widget:x(x)
     checkArg(1, x, 'number', 'nil')
     local oldX = self._position.x
-    if (x) then self._position.x = x end
+    if (x) then
+        self._position.x = x
+        if oldX ~= x then
+            self:invokeCallback("xPosChanged", oldX, x)
+        end
+    end
     return oldX
 end
 
@@ -108,7 +114,12 @@ end
 function Widget:y(y)
     checkArg(1, y, 'number', 'nil')
     local oldY = self._position.y
-    if (y) then self._position.y = y end
+    if (y) then
+        self._position.y = y
+        if oldY ~= y then
+            self:invokeCallback("yPosChanged", oldY, y)
+        end
+    end
     return oldY
 end
 
@@ -145,7 +156,12 @@ end
 function Widget:z(value)
     checkArg(1, value, 'number', 'nil')
     local oldValue = self._z or 0
-    if (value) then self._z = value end
+    if (value) then
+        self._z = value
+        if oldValue ~= value then
+            self:invokeCallback("zPosChanged", oldValue, value)
+        end
+    end
     return oldValue
 end
 
@@ -155,7 +171,10 @@ end
 function Widget:width(width)
     checkArg(1, width, 'number', 'nil')
     local oldValue = self._size.width
-    if (width) then self._size.width = width end
+    if (width) then
+        self._size.width = width
+        if oldValue ~= width then self:invokeCallback("widthChanged", oldValue, width) end
+    end
     return oldValue
 end
 
@@ -165,7 +184,10 @@ end
 function Widget:height(height)
     checkArg(1, height, 'number', 'nil')
     local oldValue = self._size.height
-    if (height) then self._size.height = height end
+    if (height) then
+        self._size.height = height
+        if oldValue ~= height then self:invokeCallback("heightChanged", oldValue, height) end
+    end
     return oldValue
 end
 
@@ -215,8 +237,11 @@ function Widget:visible(value)
     local oldVal = self._visible
     if (value ~= nil) then
         self._visible = value
+        if oldVal ~= value then self:invokeCallback("visiblityChanged", oldVal, value) end
     end
-    if (oldVal == nil) then oldVal = true end
+    if (oldVal == nil) then
+        oldVal = true
+    end
     return oldVal
 end
 
@@ -250,7 +275,7 @@ function Widget:drawBorder()
     if not self:bordered() or not self:borderSet() then return end
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
     if width < 2 or height < 2 then return end
-    local newBG = self:backgroundColor() 
+    local newBG = self:backgroundColor()
     if newBG then
         local oldBG = gpu.getBackground()
         gpu.setBackground(newBG --[[@as number]])
@@ -273,9 +298,9 @@ function Widget:drawBorder()
                 end
             end
             if oldFG then gpu.setForeground(oldFG) end
+            return true
         end
         gpu.setBackground(oldBG)
-        return true
     end
 end
 
@@ -310,12 +335,16 @@ end
 function Widget:callback(callback, ...)
     checkArg(1, callback, 'function', 'nil')
     local oldCallback = self._callback or self.defaultCallback
-    local oldArgs = self._callbackArgs or {}
+    local oldArgs = self._callbackArgs
     if (callback) then
         self._callback = callback
     end
     if (...) then self._callbackArgs = table.pack(...) end
-    return oldCallback, table.unpack(oldArgs)
+    if oldArgs then
+        return oldCallback, table.unpack(oldArgs)
+    else
+        return oldCallback
+    end
 end
 
 ---Invoke the callback method
@@ -351,7 +380,7 @@ function Widget:lockPropagationOnCallback(value)
 end
  
 --not perfect yet
-function Widget:_gpuset(x, y, str, useself) --should maybe do some checkArg here
+function Widget:_gpuset(x, y, str) --should maybe do some checkArg here
     if str == "" then return end
     local boundary = self:getParent()
     if not boundary then return end
@@ -384,7 +413,9 @@ function Widget:_gpuset(x, y, str, useself) --should maybe do some checkArg here
         end
         if str == "" then return end
     end
-    
+    if _G.snapshotLog == true then
+        require("component").ocelot.log(tostring(x)..", ".. tostring(y)..":".. str)
+    end
     gpu.set(x, y, str)
 end
 
@@ -536,6 +567,8 @@ function Widget:weld(weldedTo, x, y) --could make x and y into functions that re
         end 
         currentWeldedTo._welds[self] = nil -- breaks the reference
         self._weld = nil
+        
+        self:invokeCallback("weldBroken")
     end
     if oldVal then
         oldVal = {weldedTo = oldVal.weldedTo, x = oldVal.x, y = oldVal.y} --fresh table, don't want to pass the original since its by reference
@@ -570,12 +603,27 @@ function Widget:reset()
 end
 
 function Widget:Destroy(force) --unparent and then .. ? 
+    if force == nil then force = true end
     self:closeListeners()
-    if self.clearChildren then --should frames destroy any child objects when being destroyed?
-        self:clearChildren()
-    elseif force and self._childs then
-        for _, element in ipairs(self._childs) do
-            element:Destroy(force)
+    self:enabled(false)
+    -- if self.clearChildren then --should frames destroy any child objects when being destroyed?
+    --     self:clearChildren()
+    -- else
+    if force and self._childs then
+        local tempChilds = {} -- important since setParent(nil, nil) removes from the list in real time
+        for _,v in ipairs (self._childs) do table.insert(tempChilds, v) end
+        for _, element in ipairs(tempChilds) do
+            if element.Destroy then
+                local succ, err 
+                if element._debug then
+                    succ, err = xpcall(function() element:Destroy(force) end, debug.traceback)
+                else
+                    succ, err = pcall(element.Destroy, element, force) -- end, debug.traceback) --, element, force)
+                end
+                if not succ and err and component.isAvailable("ocelot") then
+                    component.ocelot.log(err .. " DEBUG: " .. tostring(element._debug))
+                end
+            end
         end
         self._childs = {}
     end
@@ -584,7 +632,7 @@ function Widget:Destroy(force) --unparent and then .. ?
     self:setParent(nil, nil)
     for i, v in pairs (self) do --hmm..
         --if type(v) == "table" and v.Destroy then v:Destroy() end
-        rawset(self, i, nil)
+        rawset(self,i,nil) --self[i] = nil
     end
     setmetatable(self, {}) --should be fine
 end

@@ -30,8 +30,17 @@ function DropdownList:new(parent, x, y, width, height, backgroundColor, listobj)
     return o
 end
 
-function DropdownList:value(val) --number index in list or nil
+function DropdownList:value(val, state) --number index in list or nil
+    checkArg(1, val, 'number', 'nil')
+    checkArg(2, state, 'boolean', 'nil')
+    local selection = self:list():getSelection()
+    local oldValue = selection[1] and self:list():value(selection[1])
     --hmm, list._list[list:getSelection()[1]]
+    if state~=nil then
+        self:list():value(val, state)
+        self:invokeCallback("valueChanged", val, state)
+    end
+    return oldValue
 end
 
 function DropdownList:list(newlist) -- e.g., dropdown:list():sorter(function(...) end)
@@ -57,6 +66,7 @@ function DropdownList:list(newlist) -- e.g., dropdown:list():sorter(function(...
                 end
             end)
         end
+        self:invokeCallback("listChanged", oldValue, newlist)
     end
     return oldValue
 end
@@ -66,6 +76,7 @@ function DropdownList:drop(value) --boolean or nil
     local oldValue = self._isDropped
     if self._list and value~=nil then
         self._isDropped = value
+        self:invokeCallback(value and "dropped" or "retracted")
         self._list[self:animatedDrop() and "tweenSize" or "size"](self._list, self:width(), value and (self:listHeight() or #self._list._list) or 0)
     end
     return oldValue
@@ -78,7 +89,10 @@ end
 function DropdownList:height(height)
     checkArg(1, height, 'number', 'nil')
     local oldValue = self._size.height
-    if (height) then self._size.height = math.min(height, 1) end
+    if (height) then
+        self._size.height = math.min(height, 1)
+        self:invokeCallback("heightChanged", oldValue, height)
+    end
     return oldValue
 end
 --todo: maybe add unenforced option for list object

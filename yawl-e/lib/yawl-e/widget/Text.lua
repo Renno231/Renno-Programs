@@ -55,18 +55,20 @@ end
 ---@return string
 function Text:text(...)
     local oldValue = self._text
-    local values = {...}
-    if #values > 0 then
+    if ...~=nil then
+        local values = {...}
         for i,v in ipairs (values) do --table.concat bugs out sometimes
             values[i] = tostring(v)
         end
         self._text = table.concat(values, " ")
         self:_parse()
+        
+        self:invokeCallback("valueChanged", oldValue, self._text)
     end
     return oldValue
 end
 
-function Text:textHighlight(fgcolor, bgcolor, start, finish, line)
+function Text:textHighlight(fgcolor, bgcolor, start, finish, line) -- obsolete
     checkArg(1, fgcolor, 'number', 'table')
     checkArg(1, bgcolor, 'number', 'nil')
     checkArg(1, start, 'number', 'string', 'nil')
@@ -199,6 +201,7 @@ function Text:width(width)
     if (width) then 
         self._size.width = width 
         self:_parse()
+        if oldValue ~= width then self:invokeCallback("widthChanged", oldValue, width) end
     end
     return oldValue
 end
@@ -313,7 +316,10 @@ function Text:scrollX(num, override)
     checkArg(1, num, 'number', 'nil')
     checkArg(2, override, 'boolean','nil')
     local oldValue = self._scrollindexX or 0
-    if (num) then self._scrollindexX = override and num or ((self._scrollindexX or oldValue) + num) end
+    if (num) then
+        self._scrollindexX = override and num or ((self._scrollindexX or oldValue) + num)
+        if self._scrollindexX ~= oldValue then self:invokeCallback("scrollXChanged", oldValue, self._scrollindexX) end
+    end
     return oldValue
 end
 
@@ -321,7 +327,10 @@ function Text:scrollY(num, override)
     checkArg(1, num, 'number', 'nil')
     checkArg(2, override, 'boolean','nil')
     local oldValue = self._scrollindexY or 0
-    if (num) then self._scrollindexY = override and num or ((self._scrollindexY or oldValue) + num) end
+    if (num) then
+        self._scrollindexY = override and num or ((self._scrollindexY or oldValue) + num)
+        if self._scrollindexY ~= oldValue then self:invokeCallback("scrollYChanged", oldValue, self._scrollindexY) end
+    end
     return oldValue
 end
 

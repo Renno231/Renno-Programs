@@ -36,12 +36,27 @@ function SortedList:new(parent, x, y, width, height, backgroundColor)
     return o
 end
 
+function SortedList:maximumSelectedValues(value)
+    checkArg(1, value, 'number', 'boolean', 'nil')
+    local oldValue = self._maximumSelection
+    if type(value) == "number" then self._maximumSelection = value end
+    if value == false then self._maximumSelection = nil end
+    return oldValue
+end
+
 function SortedList:select(index, state) --getter/setter
     checkArg(1, index, 'number')
     checkArg(1, state, 'boolean', 'nil')
     local oldValue = self._selection[index]
     if state ~= nil then --needs work 
-        self._selection[index] = state --select
+        local max = self:maximumSelectedValues()
+        local totalSelected = max and #self:getSelection()
+        if (max and totalSelected < max) or state == false or max == nil then
+            if oldValue~=nil and oldValue ~= index then
+                self:invokeCallback("selectionChanged", self:getSelection(), self._value)
+            end
+            self._selection[index] = state --select
+        end
     end
     return oldValue
 end
@@ -51,6 +66,7 @@ function SortedList:value(index, newval) --getter/setter, use delete to remove t
     local oldValue = self._list[index]
     if newval ~= nil then --needs work 
         self._list[index] = newval --overwrite
+        self:invokeCallback("valueChanged", oldValue, newval, index)
     end
     return oldValue
 end
@@ -67,8 +83,10 @@ function SortedList:insert(value, index)
     end
     if type(index)=='number' then
         table.insert(self._list, index, value) 
+        self:invokeCallback("valueAdded", index, value)
     else
         table.insert(self._list, value)
+        self:invokeCallback("valueAdded", #self._list, value)
     end
     return true
 end
@@ -81,12 +99,17 @@ function SortedList:delete(value)
         return value(self)
     elseif valueType == 'number' then --index
         if self._list[value] then
-            return table.remove(self._list, value)
+            local removed = table.remove(self._list, value)
+            
+            self:invokeCallback("valueRemoved", value, removed)
+            return removed
         end
     else
         for i,v in ipairs (self._list) do
             if v == value then
-                return table.remove(self._list, i)
+                local removed = table.remove(self._list, value)
+                self:invokeCallback("valueRemoved", value, removed)
+                return removed
             end
         end
     end
@@ -142,13 +165,25 @@ function SortedList:format(formatfunc) --for displaying values
     return oldValue
 end
 
+function SortedList:list(newlist)
+    checkArg(1, newlist, 'table', 'nil')
+    local oldValue = self._list
+    if (newlist ~= nil) then
+        self._list = newlist
+        self:invokeCallback("listChanged", oldValue, newlist)
+    end
+    return oldValue
+end
+
 function SortedList:clearList() --empty list
     self._list = {}
+    self:invokeCallback("listCleared")
     return true
 end
 
 function SortedList:clearSelection() --empty list
     self._selection = {}
+    self:invokeCallback("selectionCleared")
     return true
 end
 
@@ -164,11 +199,12 @@ function SortedList:mount(object)
     checkArg(1, object, 'table', 'nil', 'boolean')
     --check for duplicates first
     local oldValue = self._mount
-    local objectType = type(object)
-    if objectType == 'table' and object.text then --note: could potentially use something that isn't strictly text based, e.g., a toggle switch :value()
+    if type(object) == 'table' and object.text then --note: could potentially use something that isn't strictly text based, e.g., a toggle switch :value()
         self._mount = object
-    elseif object == false then
+        self:invokeCallback("mounted", object)
+    elseif object == false and self._mount then
         self._mount = nil
+        self:invokeCallback("unmounted")
     end
     return oldValue
 end
@@ -178,8 +214,8 @@ function SortedList:scroll(value, override) --not perfect, needs refinement for 
     local oldValue = self._contextScroll or self._scrollindex or 0
     
     if (value ~= nil) then --and height <= shownheight then 
-        if self._filter == "" or not self._filter then --I know, you won't like that I accessed them directly
-            self._scrollindex = math.max(math.min(#self._list - self:height(), (override and 0 or self._scrollindex) + value), 0)
+        if self._filter == "" or not self._filter then
+            self._scrollindex = math.max(math.min(#self._list - self:height() + 1, (override and 0 or self._scrollindex) + value), 0)
         elseif #self._shown > 0 then --filterBy is set and there is something to visually scroll
             local currentListIndex = self._shown[1]
             if self._contextScroll == 0 then 
@@ -228,6 +264,13 @@ function SortedList:defaultCallback(_, eventName, uuid, x, y, button, playerName
         end
         return true
     elseif eventName == "scroll" then
+        if self:maximumSelectedValues() == 1 and keyboard.isControlDown() then
+            local selected = self:getSelection()[1]
+            if selected and self:value(selected-button)~=nil then
+                self:select(selected, false)
+                self:select(selected-button, true)
+            end
+        end
         local oldScroll = self:scroll(-button)
         return oldScroll~=self:scroll()
     end
@@ -284,25 +327,6 @@ function SortedList:draw() --could make it check to see if its hitting the borde
             end
         end
     end
-    -- efficient, but not wholly effective
-    -- repeat
-    --     local index = i + scrollIndex
-    --     listValue = self._list[index] 
-    --     if not listValue then break end
-    --     if filterFunc and filterValue then
-    --         local succ, returned = pcall(filterFunc, filterValue, listValue)
-    --         if succ then
-    --             if returned~=nil and returned~=false then
-    --                 table.insert(self._shown, index)
-    --             end
-    --         elseif self._showsErrors then
-    --             table.insert(self._shown, tostring(index).." (filter)"..returned)
-    --         end
-    --     else
-    --         table.insert(self._shown, index)
-    --     end
-    --     i=i+1
-    -- until listValue == nil or #self._shown > height --go to at most 1 over
     
     local formatFunc, isNumbered = self:format(), self:numbered()
     local linePrefix = "%+"..tostring(tostring(#self._shown):len()).."s:%+"..tostring(tostring(#self._list):len()).."s "

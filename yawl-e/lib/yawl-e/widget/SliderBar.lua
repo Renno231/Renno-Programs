@@ -44,7 +44,10 @@ end
 function SliderBar:value(value)
     checkArg(1, value, 'number', 'nil')
     local oldValue = self._value
-    if (value ~= nil) then self._value = math.max(math.min(self:max(), value), self:min()) end
+    if (value ~= nil) then
+        self._value = math.max(math.min(self:max(), value), self:min())
+        self:invokeCallback("valueChanged", oldValue, self._value)
+    end
     return oldValue
 end
 
@@ -55,7 +58,9 @@ function SliderBar:min(minimum)
     local oldValue = self._min
     if (minimum ~= nil) then 
         self._min = minimum 
+        self:invokeCallback("minimumChanged", oldValue, minimum)
         if self._value and minimum > self._value then
+            self:invokeCallback("valueChanged", self._value, minimum)
             self._value = minimum
         end
     end
@@ -69,7 +74,9 @@ function SliderBar:max(maximum) --need to make sure it is higher than the minimu
     local oldValue = self._max
     if (maximum ~= nil) then 
         self._max = maximum 
+        self:invokeCallback("maximumChanged", oldValue, maximum)
         if self._value and maximum < self._value then
+            self:invokeCallback("valueChanged", self._value, maximum)
             self._value = maximum
         end 
     end
