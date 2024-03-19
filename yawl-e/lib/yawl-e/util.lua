@@ -136,6 +136,10 @@ function Tab:addChild(child)
     child:setParent(self._parent, false) 
 end
 
+function Tab:name()
+    return self._name
+end
+
 function Tab:displayName(text)
     checkArg(1, text, 'function', 'string', 'nil')
     local oldValue = self._displayName --type(self._displayName) == 'function' and self._displayName() or self._displayName
@@ -157,7 +161,7 @@ function Tab:scrollY(num, override)
     checkArg(1, num, 'number', 'nil')
     checkArg(2, override, 'boolean','nil')
     local oldValue = self._scrollY or 0
-    if (num) then self._scrollY = override and num or ((self._scrollY or oldValue) + num) end
+    if (num) then self._scrollY = override and num or (oldValue + num) end
     return oldValue
 end
 
