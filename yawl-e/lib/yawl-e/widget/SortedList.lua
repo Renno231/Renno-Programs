@@ -1,5 +1,5 @@
 local gpu = require("component").gpu
-local Widget = require("yawl-e.widget.Widget")
+local Widget = require("yawl-e").widget.Widget
 local unicode = require("unicode")
 local keyboard = require('keyboard')
 
@@ -22,7 +22,7 @@ function SortedList:new(parent, x, y, width, height, backgroundColor)
     checkArg(3, y, 'number')
     checkArg(4, width, 'number')
     checkArg(5, height, 'number')
-    checkArg(6, backgroundColor, 'number')
+    checkArg(6, backgroundColor, 'number', 'nil')
     local o = self.parent(parent, x, y)
     setmetatable(o, {__index = self})
     o._list = {}
@@ -343,13 +343,13 @@ function SortedList:draw() --could make it check to see if its hitting the borde
             listValue = (isNumbered and string.format(linePrefix, line, index) or "") .. tostring(listValue):gsub("\n","; ")
             local isSelected = self._selection[index]
             if isSelected and newFG and newBG then gpu.setBackground(newFG) gpu.setForeground(newBG) end
-            self:_gpuset(x, y+line-1, unicode.sub(listValue, 1, width) ) --do the formatting here
+            self:_gpuset(x, y+line-1, unicode.sub(listValue, 1, width-1) ) --do the formatting here
             if isSelected and newFG and newBG then gpu.setBackground(newBG) gpu.setForeground(newFG) end
         else
             local errVal = index:gsub("\n","; ")
             local failedIndex = errVal:match("%d+")
             errVal = unicode.sub(errVal, failedIndex:len()+2)
-            self:_gpuset(x, y+line-1, unicode.sub( (isNumbered and string.format(linePrefix, line, failedIndex) or "") .. errVal, 1, width) )
+            self:_gpuset(x, y+line-1, unicode.sub( (isNumbered and string.format(linePrefix, line, failedIndex) or "") .. errVal, 1, width-1) )
         end
     end
     gpu.setBackground(oldBG)

@@ -1,9 +1,9 @@
-local SortedList = require("yawl-e.widget.SortedList")
 local class = require('libClass2')
 local unicode = require("unicode")
 local gpu = require("component").gpu
 
 local Widget = require("yawl-e.widget.Widget")
+local SortedList = require("yawl-e").widget.SortedList
 local DropdownList = class(Widget)
 
 function DropdownList:new(parent, x, y, width, height, backgroundColor, listobj) --not designed to work inside of UILayout
@@ -13,12 +13,13 @@ function DropdownList:new(parent, x, y, width, height, backgroundColor, listobj)
     checkArg(4, width, 'number')
     checkArg(5, height, 'number')
     checkArg(6, backgroundColor, 'number')
-    checkArg(6, listobj, 'table','nil')
+    checkArg(7, listobj, 'table','nil')
     local o = self.parent(parent, x, y)
     setmetatable(o, {__index = self})
     o._dropped = false
     ---@cast o DropdownList
-    o:list(listobj or SortedList(parent, x, y+height, width, 5, backgroundColor))
+    listobj = listobj or SortedList(parent, x, y+height, width, 5, backgroundColor)
+    o:list(listobj)
     o:list():foregroundColor(0xffffff)
     
     o:list():weld(o, 0, 1)
@@ -145,7 +146,7 @@ function DropdownList:draw()
     local list = self._list
     if not list then return end
     list:width(width)
-    local listValue = tostring(list._list[list:getSelection()[1]] or "")
+    local listValue = tostring(list._list[list:getSelection()[1]] or "") --could or should replace with list:value()
     if not listValue then return end
     local formatFunc = list:format()
     if formatFunc then
@@ -158,7 +159,7 @@ function DropdownList:draw()
     if charset then
         listValue = (unicode.charAt(charset, self:drop() and 2 or 1)) .. " " .. listValue
     end
-    self:_gpuset(x, y, unicode.sub(listValue, 1, width) ) --do the formatting here
+    self:_gpuset(x, y, unicode.sub(listValue, 1, width-1) ) --do the formatting here
 
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)

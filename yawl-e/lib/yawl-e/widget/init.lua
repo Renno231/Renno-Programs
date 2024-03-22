@@ -18,8 +18,14 @@ local yawle = {
 }
 setmetatable(yawle,{
     __index = function(table, index, value)
-        local lib = require("yawl-e.widget."..index)
-        if not lib.Class then lib.Class = index end
+        local succ, lib = pcall(require, "yawl-e.widget."..index)
+        if not succ then
+            if require"component".isAvailable("ocelot") then
+                require"component".ocelot.log(lib)
+                return
+            end
+        end
+        rawset(lib, "Class", index)
         if not rawget(yawle, index) then rawset(yawle, index, lib) end
         return lib
     end
