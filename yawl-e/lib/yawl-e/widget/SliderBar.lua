@@ -1,6 +1,6 @@
 local gpu = require("component").gpu
 local Widget = require("yawl-e.widget.Widget")
-
+-- need to make it possible to support vertical
 ---@class SliderBar:Widget
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,min:number|nil,max:number|nil,backgroundColor:number|nil,foregroundColor:number|nil):SliderBar
 local SliderBar = require("libClass2")(Widget)
@@ -44,25 +44,42 @@ end
 function SliderBar:value(value)
     checkArg(1, value, 'number', 'nil')
     local oldValue = self._value
-    if (value ~= nil) then self._value = math.max(math.min(self:max(), value), self:min()) end
+    if (value ~= nil) then
+        self._value = math.max(math.min(self:max(), value), self:min())
+        self:invokeCallback("valueChanged", oldValue, self._value)
+    end
     return oldValue
 end
 
 ---@param value? number
 ---@return number
-function SliderBar:min(value)
-    checkArg(1, value, 'number', 'nil')
+function SliderBar:min(minimum)
+    checkArg(1, minimum, 'number', 'nil')
     local oldValue = self._min
-    if (value ~= nil) then self._min = value end
+    if (minimum ~= nil) then 
+        self._min = minimum 
+        self:invokeCallback("minimumChanged", oldValue, minimum)
+        if self._value and minimum > self._value then
+            self:invokeCallback("valueChanged", self._value, minimum)
+            self._value = minimum
+        end
+    end
     return oldValue
 end
 
 ---@param value? number
 ---@return number
-function SliderBar:max(value) --need to make sure it is higher than the minimum
-    checkArg(1, value, 'number', 'nil')
+function SliderBar:max(maximum) --need to make sure it is higher than the minimum
+    checkArg(1, maximum, 'number', 'nil')
     local oldValue = self._max
-    if (value ~= nil) then self._max = value end
+    if (maximum ~= nil) then 
+        self._max = maximum 
+        self:invokeCallback("maximumChanged", oldValue, maximum)
+        if self._value and maximum < self._value then
+            self:invokeCallback("valueChanged", self._value, maximum)
+            self._value = maximum
+        end 
+    end
     return oldValue
 end
 
@@ -83,14 +100,18 @@ function SliderBar:adjust(value)
     return self:value(self:value() + value)
 end
 
-function SliderBar:defaultCallback(_, eventName, _, x)
-    if (eventName ~= 'drag' and eventName ~= 'touch') then return end
-    local t = x - self:x()
-    local a, b = 0, self:width() - 1
-    local c, d = self:range()
-    --math.round = function(a) return math.floor(a+0.5) end
-    self:value(math.floor((c + ((d - c) / (b - a)) * (t - a)) + 0.5))
-    return true
+function SliderBar:defaultCallback(_, eventName, uuid, x, y, button, playerName)
+    if eventName == 'drag' or eventName == 'touch' then
+        local t = x - self:absX() --technically this should be + 1
+        local b = self:width() - 1 --and this shouldn't be changed
+        local c, d = self:range()
+        --math.round = function(a) return math.floor(a+0.5) end
+        self:value(math.floor((c + ((d - c) / b ) * t) + 0.5))
+        return true
+    elseif eventName == "scroll" then
+        local old = self:adjust(button)
+        return old == self:value() --true
+    end
 end
 
 function SliderBar:draw()
@@ -102,14 +123,15 @@ function SliderBar:draw()
     if newBG then
         gpu.setBackground(newBG)
     end
-    self:_gpufill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ", true) --overwrite the background
     if newFG then gpu.setForeground(newFG) end
     self:_gpufill(x, y + math.ceil(height / 2) - 1, width, 1, "━")
     --gpu.setBackground(self._slider.backgroundColor) --maybe
     --TODO : slider width
     if value then
-        local percent = math.floor(((width - 1) * (value / (self:max() - self:min()))))
-        self:_gpufill(x + percent, y, 1, height, " ") --might make funny tall slider
+        local barX = math.floor((width - 1) * (value - self:min()) / (self:max() - self:min()) + 0.5)
+        if newFG then gpu.setBackground(newFG) end  
+        self:_gpufill(x + barX, y, 1, height, " ", true)
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)

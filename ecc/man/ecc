@@ -1,0 +1,66 @@
+NAME
+  ecc - Elliptic Curve Cryptography library for OpenComputers
+
+DESCRIPTION
+  ECC is a cryptographic library ported to OpenComputers by Renno231, designed for efficient memory usage through lazy-loading. It allows for direct indexing or using the load metamethod function to manage module availability. The unload method functions similarly, either unloading all cached libraries or a specific one by name. ECC supports a variety of cryptographic operations, including ECDH, without requiring a data card. Sublibraries such as chacha20, sha256, and random (for cryptographically secure randomness) are exposed and require ECC for operation.
+
+EXAMPLES
+  local ecc = require("ecc")
+  
+  -- Symmetric Encryption and Decryption
+  local key = "secretkey123456789012" -- Key should be of appropriate length for chacha20
+  local data = "Hello, OpenComputers!"
+  
+  local encryptedData = ecc.encrypt(data, key)
+  local decryptedData = ecc.decrypt(encryptedData, key)
+  
+  print("Encrypted:", encryptedData)
+  print("Decrypted:", decryptedData)
+  
+  -- Asymmetric Encryption and Decryption
+  local seed = os.time() -- Example seed; use a secure random seed in practice
+  local privateKey, publicKey = ecc.keypair(seed) -- Generate key pair
+  
+  -- Asymmetric encryption
+  local data = "Secret message"
+  local encryptedData = ecc.aencrypt(publicKey, data)
+  
+  -- Asymmetric decryption
+  local decryptedData = ecc.adecrypt(privateKey, encryptedData)
+  
+  print("Asymmetric Encrypted:", encryptedData)
+  print("Asymmetric Decrypted:", decryptedData)
+  
+  -- Symmetric Encryption using passwords
+  local password = "strongpassword"
+  local salt = "somesalt"
+  local iterations = 1000 -- The number of iterations can be adjusted based on security requirements
+  
+  local key = ecc.keyFromPassword(password, salt, iterations)
+  print("Derived Key:", key)
+  
+  -- Generate key pairs for two parties
+  local seed1, seed2 = os.time(), os.time() + 1
+  local privateKey1, publicKey1 = ecc.keypair(seed1)
+  local privateKey2, publicKey2 = ecc.keypair(seed2)
+  
+  -- Perform key exchange
+  local sharedSecret1 = ecc.exchange(privateKey1, publicKey2)
+  local sharedSecret2 = ecc.exchange(privateKey2, publicKey1)
+  
+  assert(sharedSecret1 == sharedSecret2, "Shared secrets do not match!")
+  print("ECDH Shared Secret:", sharedSecret1)
+  
+  --Signing and Verifying a Message
+  local message = "Verify this message"
+  
+  -- Generate a key pair
+  local seed = os.time()
+  local privateKey, publicKey = ecc.keypair(seed)
+  
+  -- Sign the message
+  local signature = ecc.sign(privateKey, message)
+  
+  -- Verify the signature
+  local isValid = ecc.verify(publicKey, message, signature)
+  print("Signature valid?", isValid and "Yes" or "No")

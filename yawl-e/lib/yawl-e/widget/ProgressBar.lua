@@ -4,7 +4,6 @@ local unicode = require("unicode")
 ---@class ProgressBar:Widget
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,min:number|nil,max:number|nil,backgroundColor:number|nil,foregroundColor:number|nil):ProgressBar
 local ProgressBar = require("libClass2")(Widget)
-ProgressBar:_borderOverride(true)
 ---@param parent Frame
 ---@param x number
 ---@param y number
@@ -31,6 +30,7 @@ function ProgressBar:new(parent, x, y, width, height, backgroundColor, foregroun
     o:value(0)
     o:backgroundColor(backgroundColor)
     o:foregroundColor(foregroundColor)
+    o._borderoverride = true
     return o
 end
 
@@ -39,7 +39,10 @@ end
 function ProgressBar:value(value)
     checkArg(1, value, 'number', 'nil')
     local oldValue = self._value
-    if (value ~= nil) then self._value = math.max(math.min(1, value), 0) end
+    if (value ~= nil) then
+        self._value = math.max(math.min(1, value), 0)
+        self:invokeCallback("valueChanged", oldValue, value)
+    end
     return oldValue
 end
 
@@ -77,7 +80,7 @@ function ProgressBar:draw()
     local newBG, newFG = self:backgroundColor(), self:foregroundColor()
     local fillBG = self:fillBackgroundColor()
     if newBG then gpu.setBackground(newBG) end
-    self:_gpufill(x, y, width, height, " ") --overwrite the background
+    self:_gpufill(x, y, width, height, " ", true) --overwrite the background
     
     if value and value>0 then
         local percent = math.floor(0.5 + ((width - 1) * (value / 1))) --rounded, might not need -1    

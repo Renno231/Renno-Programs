@@ -60,6 +60,7 @@ function Frame:new(parentFrame, x, y)
     o:size(w - o:x() + 1, h - o:y() + 1)
     o._lastTouch = {x = 0, y = 0, t = 0}
     o._weldCount = 0
+    o._propagateFirst = false
     if (not parentFrame) then
         o._listeners.touch =  event.listen("touch",  function(...) o:_touchHandler(...)  end)
         o._listeners.drag =   event.listen("drag",   function(...) o:propagateEvent(...) end)
@@ -86,6 +87,7 @@ end
 ---@param containerChild Widget|Frame
 function Frame:addChild(containerChild)
     table.insert(self._childs, containerChild)
+    self:invokeCallback("childAdded", containerChild)
 end
 
 ---Remove a child from the container. Return the removed child on success
@@ -94,16 +96,21 @@ end
 ---@return T? child
 function Frame:removeChild(child)
     local childId = 0
-    for i, v in pairs(self._childs) do
-        if (v == child) then childId = i end
+    for i, v in ipairs(self._childs) do
+        if (v == child) then childId = i break end
     end
     if (childId > 0) then
+        self:invokeCallback("childRemoved", self._childs[childId])
         table.remove(self._childs, childId)
         return child
     end
 end
 
 function Frame:clearChildren()
+    for _, element in ipairs(self._childs) do
+        element:Destroy(true)
+    end
+    self:invokeCallback("clearedChildren")
     self._childs = {}
     return true
 end
@@ -111,25 +118,46 @@ end
 function Frame:propagateEvent(eName, screenAddress, x, y, ...)
     if (not self:enabled()) then return end
     table.sort(self._childs, function(a, b) return a:z() < b:z() end)
+    
     for i = #(self._childs), 1, -1 do
         local w = self._childs[i]
-        --TODO : find a new yeilding methods
-        --os.sleep()
         if (w:checkCollision(x, y)) then
+            local cSuccess 
             if (w:instanceOf(Frame)) then
                 ---@cast w Frame
                 --frame needs callback first, if not return true then propagate downward
-                if w:invokeCallback(eName, screenAddress, x, y, ...) == true then
-                    return true
-                elseif (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then 
-                    return true
+                if w:propagateFirst() then
+                    if (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then
+                        return true
+                    elseif w:invokeCallback(eName, screenAddress, x, y, ...) == true then
+                        return true
+                    end
+                else
+                    if w:invokeCallback(eName, screenAddress, x, y, ...) == true then
+                        return true
+                    elseif (w:propagateEvent(eName, screenAddress, x, y, ...) == true) then
+                        return true
+                    end
                 end
-            else    
-                w:invokeCallback(eName, screenAddress, x, y, ...)
+            else
+                cSuccess = w:invokeCallback(eName, screenAddress, x, y, ...)
             end
-            return true
+            
+            if cSuccess or (w:lockPropagationOnCallback() and (w:callback() ~= w.defaultCallback or w.defaultCallback~=Widget.defaultCallback)) then
+                return true
+            else
+                return self:invokeCallback(eName, screenAddress, x, y, ...)
+            end 
         end
     end
+    return self:invokeCallback(eName, screenAddress, x, y, ...) 
+end
+
+function Frame:propagateFirst(value)
+    checkArg(1, value, 'boolean', 'nil')
+    local oldValue = self._propagateFirst
+    if (value ~= nil) then self._propagateFirst = value end
+    return oldValue
 end
 
 ---@param value? number
@@ -139,6 +167,24 @@ function Frame:doubleTouchDelay(value)
     local oldValue = self._doubleTouchDelay or 0.5
     if (value ~= nil) then self._doubleTouchDelay = value end
     return oldValue
+end
+
+function Frame:_drawnBounds(x,y,width,height)
+    checkArg(1, x, 'number', 'nil')
+    checkArg(1, y, 'number', 'nil')
+    checkArg(1, width, 'number', 'nil')
+    checkArg(1, height, 'number', 'nil')
+    local oldValue = self._drawnBoundsValues
+    if (x and y and width and height) then 
+        self._drawnBoundsValues = self._drawnBoundsValues or {}
+        self._drawnBoundsValues[1] = x -- = {x,y,width,height} 
+        self._drawnBoundsValues[2] = y
+        self._drawnBoundsValues[3] = width
+        self._drawnBoundsValues[4] = height
+    end
+    if oldValue then
+        return oldValue[1], oldValue[2], oldValue[3], oldValue[4]
+    end
 end
 
 ---initialize a frame buffer
@@ -192,14 +238,19 @@ function Frame:draw()
     local defaultBuffer, newBuffer = self:_initBuffer()
 
     --clean background
-    if (self:backgroundColor()) then
+    local newBG = self:backgroundColor()
+    if (newBG) then
         local oldBG = gpu.getBackground()
-        gpu.setBackground(self:backgroundColor() --[[@as number]])
-        self:_gpufill(x, y, width, height, " ")
+        gpu.setBackground(newBG)
+        self:_gpufill(x, y, width, height, " ", true)
         gpu.setBackground(oldBG)
+    else
+        self:_gpufill(x, y, width, height, " ", true)
     end
-    if not self._childs then return false end
-    if #self._childs == 0 then return end
+    if not self._childs or #self._childs == 0 then
+        return self.drawBorder and self:drawBorder() or false
+    end
+        
     --sort widgets by z
     self:_sort()
     local isRoot = self:getParent() == nil
@@ -212,13 +263,16 @@ function Frame:draw()
             element:_tweenStep()
         end
     end
-    for _, element in pairs(self._childs) do
+    for _, element in pairs(self._childs) do --could (technically *should*) have error handling here
         element[tweenOrWeld](element)
-        if element:draw() and element.drawBorder and not element._borderoverride then 
+        local noDrawError, drawReturn = pcall(element.draw, element)
+        
+        if noDrawError and drawReturn==true and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end
     end
-    if isRoot and self.drawBorder and not self._borderoverride then self:drawBorder() end
+    
+    if self.drawBorder and not self._borderoverride then self:drawBorder() end
     --might need to call self:drawBorder() like for the elements ^
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)

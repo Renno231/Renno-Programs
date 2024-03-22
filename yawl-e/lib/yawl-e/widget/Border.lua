@@ -23,7 +23,7 @@ function Border:new(parent, x, y, borderset)
     setmetatable(o, {__index = self})
     o:borderSet(borderset)
     o:bordered(true)
-    o:_borderOverride(true)
+    o._borderoverride = true
     o:autoFit(true, true)
     ---@cast o Border
     return o
@@ -87,7 +87,7 @@ function Border:draw()
     if (self:backgroundColor()) then
         local oldBG = gpu.getBackground()
         gpu.setBackground(self:backgroundColor() --[[@as number]])
-        self:_gpufill(x, y, width, height, " ")
+        self:_gpufill(x, y, width, height, " ", true)
         gpu.setBackground(oldBG)
     end
     --draw the children widgets after wiping background
@@ -95,7 +95,7 @@ function Border:draw()
         if element:draw() and element.drawBorder and not element._borderoverride then element:drawBorder() end
     end
     --draw the border
-    if isRoot and self.drawBorder and self:bordered() then self:drawBorder() end
+    if self.drawBorder and self:bordered() then self:drawBorder() end
     --restore buffer
     self:_restoreBuffer(defaultBuffer, newBuffer)
     return true

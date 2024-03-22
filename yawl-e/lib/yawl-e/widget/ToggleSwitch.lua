@@ -19,23 +19,25 @@ local ToggleSwitch = class(Widget)
 ---@param backgroundColor? number
 ---@param foregroundColor? number
 ---@return ToggleSwitch
-function ToggleSwitch:new(parent, x, y, width, height, backgroundColor, foregroundColor)
+function ToggleSwitch:new(parent, x, y, width, height, backgroundColor, foregroundColor, activeBG)
     checkArg(1, parent, 'table')
     checkArg(2, x, 'number')
     checkArg(3, y, 'number')
     checkArg(4, width, 'number')
     checkArg(5, height, 'number')
     checkArg(6, backgroundColor, 'number', 'nil')
-    checkArg(6, foregroundColor, 'number', 'nil')
+    checkArg(7, foregroundColor, 'number', 'nil')
+    checkArg(8, activeBG, 'number', 'nil')
     local o = self.parent(parent, x, y)
     setmetatable(o, {__index = self})
     ---@cast o ToggleSwitch
     o._value = false
-    o._slider = {x = 0, width = height, height = height, backgroundColor = foregroundColor}
+    o._slider = {x = 0, width = height, height = height, backgroundColor = foregroundColor or 0xffffff}
     o:speed(2)
     ---@cast o ToggleSwitch
     o:size(math.max(2, width), height)
-    o:backgroundColor(backgroundColor)
+    o:activeBackgroundColor(activeBG or 0x1ca152)
+    o:backgroundColor(backgroundColor or 0xee0000)
     return o
 end
 
@@ -51,7 +53,12 @@ end
 function ToggleSwitch:value(value)
     checkArg(1, value, 'boolean', 'nil')
     local oldValue = self._value
-    if (value ~= nil) then self._value = value end
+    if (value ~= nil) then
+        self._value = value
+        if oldValue ~= value then 
+            self:invokeCallback("valueChanged", oldValue, value)
+        end
+    end
     return oldValue
 end
 
@@ -95,10 +102,14 @@ function ToggleSwitch:draw()
     local x, y = self:absX(), self:absY()
     local sliderX, step = self._slider.x, (self:value() and 1 or -1) * math.max(1, self:width() * self:speed() / 10)
     local boundary = math.max(math.min(self:width() - self._slider.width, sliderX + step), 0)
-    local oldBG = gpu.getBackground()
-    gpu.setBackground(self:backgroundColor())
+    local newBG, oldBG = self:backgroundColor(), gpu.getBackground()
+    if newBG then
+        gpu.setBackground(self:backgroundColor())
+    end
     self:_gpufill(x, y, self:width(), self:height(), " ")
-    gpu.setBackground(self._slider.backgroundColor)
+    if self._slider.backgroundColor then 
+        gpu.setBackground(self._slider.backgroundColor)
+    end
     self:_gpufill(x + boundary, y, self._slider.width, self._slider.height, " ")
     if boundary ~= sliderX then
         self._slider.x = boundary

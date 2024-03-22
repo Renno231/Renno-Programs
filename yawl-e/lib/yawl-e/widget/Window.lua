@@ -9,8 +9,10 @@
         end
     each "tab" needs to be a Tab object which contains the following
         {_childs = {}, parent = somewindow, displayName = string, tabX = num, tabY = num, scrollX = num, scrollY = num, addChild = function(child) self._parent.addChild(self, child) child:setParent(self._parent, false) end, removeChild = ScrollFrame.removeChild }
+    needs to override clearChildren
 ]]
 
+local keyboard = require('keyboard')
 local class = require("libClass2")
 local ScrollFrame = require("yawl-e.widget.ScrollFrame")
 local Tab = require("yawl-e.util").Tab
@@ -35,15 +37,45 @@ function Window:new(parentFrame, x, y, width, height)
     o._hitboxTop = {} --each index represents x coordinate where a tab is drawn and points towards the tab drawn
     o._hitboxBottom = {}
     o:size(width, height)
+    o:propagateFirst(true)
     --self._selectedTab
     return o
 end
 
---need to decide how to add widgets to different tabs
+function Window:propagateEvent(eName, screenAddress, x, y, ...)
+    local isBordered = self:bordered()
+    local abx, aby = self:absX() + (isBordered and 1 or 0), self:absY() + (isBordered and 1 or 0)
+    local width, height = self:width() + (isBordered and -2 or 0), self:height() + (isBordered and -2 or 0)
+    -- checking if the event is on the edge of the window
+    if (x < abx ) then return false end
+    if (x > abx + width - 1) then return false end
+    if (y < aby) then return false end
+    if (y > aby + height - 1) then return false end
+    local hitbox = (y == aby and self._hitboxBottom) or (y == aby+height-1 and self._hitboxTop)
+    local tab = hitbox and hitbox[x]
+    if tab then --need to account for border?
+        return false
+    end
+    return ScrollFrame.propagateEvent(self, eName, screenAddress, x, y, ...)
+end
 
+--need to decide how to add widgets to different tabs
 function Window:tab(tabName) --retrieves tab if it exists
     checkArg(1, tabName, 'string', 'nil')
-    return tabName and self._tabs[tabName] -- or self._selectedTab --or self ?
+    return tabName and self._tabs[tabName] or self._selectedTab --or self ?
+end
+
+function Window:clearChildren()
+    local foundTab = self._selectedTab
+    if foundTab and foundTab._childs and #foundTab._childs>0 then
+        for _, widget in ipairs (foundTab._childs) do
+            widget:Destroy(true)
+        end
+        foundTab._childs = {}
+        self._childs = foundTab._childs
+    end
+    
+    return true
 end
 
 function Window:openTab(name, x, y) --perhaps should tabs now be allowed to overlap? such that x represents the index in the tab list and y reprents top or bottom? could also 
@@ -58,6 +90,8 @@ function Window:openTab(name, x, y) --perhaps should tabs now be allowed to over
     local newtab = Tab:new(self, name, x or 0, y or 0)
     self._tabs[name] = newtab
     table.insert(self._tabsSorted, newtab)
+
+    self:invokeCallback("openedTab", #self._tabsSorted, newtab)
     self._tabCount = self._tabCount + 1
 end
 
@@ -88,6 +122,8 @@ function Window:closeTab(name)
         for i, tab in ipairs (self._tabsSorted) do
             if tab == foundTab then foundi = i break end
         end
+            
+        self:invokeCallback("closedTab", foundi, self._tabsSorted[foundi])
         table.remove(self._tabsSorted, foundi)
     end
 end
@@ -102,9 +138,10 @@ function Window:selectTab(tabname, state) --method name not set in stone
     if foundTab then
         self._selectedTab = foundTab
         self._childs = foundTab._childs
-        self:scrollX(foundTab._scrollX)
-        self:scrollY(foundTab._scrollY)
+        self:scrollX(foundTab._scrollX, true)
+        self:scrollY(foundTab._scrollY, true)
         foundTab._lastSelected = computer.uptime()
+        self:invokeCallback("selectedTab", foundTab)
     end
 end
 
@@ -112,16 +149,9 @@ function Window:_sortTabs()
     table.sort(self._tabsSorted, function(a,b) return a._lastSelected > b._lastSelected end)
 end
 
-function Window:addChild(containerChild)
-    --[[if self._tabCount == 0 then
-        self:openTab("Untitled")
-        self:selectTab("Untitled")
-    end]]
-    table.insert(self._childs, containerChild)
-end
-
 function Window:defaultCallback(_, eventName, uuid, x, y, button, playerName) --needs refinement
     --require("component").ocelot.log(string.format("%s %s", eventName, require("computer").uptime()))
+    local tab = self:tab()
     if eventName == "touch" then
         local abx, aby, width, height = self:absX(), self:absY(), self:width(), self:height()
         local hitbox = (y == aby and self._hitboxBottom) or (y == aby+height-1 and self._hitboxTop)
@@ -136,6 +166,26 @@ function Window:defaultCallback(_, eventName, uuid, x, y, button, playerName) --
             return
         end
         return true
+    elseif eventName=="scroll" and tab then 
+        local currentScrollX, currentScrollY = tab:scrollX(), tab:scrollY()
+        if keyboard.isControlDown() then
+            local minX, maxX = self:minimumScrollX(), self:maximumScrollX()
+            if (button == -1 and currentScrollX-button >= (minX or 2)) or (button == 1 and currentScrollX-button <= (maxX or -2)) then
+                tab:scrollX(button)
+                self:scrollX(tab:scrollX(), true)
+                return true
+            end
+        else
+            local minY, maxY = self:minimumScrollY(), self:maximumScrollY()
+            if (button == 1 and currentScrollY-button >= (minY or 0)) or (button == -1 and currentScrollY-button <= (maxY or 0)) then
+                tab:scrollY(-button) -- this is firing twice ONLY on the Main window in client.lua
+                -- local now = require"computer".uptime()
+                -- if self._debug then self._debug:text(now, (self._lastfuck or 0) == now) end
+                -- self._lastfuck = now
+                self:scrollY(tab:scrollY(), true)
+                return true
+            end
+        end
     end
 end
 
