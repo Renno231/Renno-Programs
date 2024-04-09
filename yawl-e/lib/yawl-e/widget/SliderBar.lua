@@ -60,8 +60,9 @@ function SliderBar:min(minimum)
         self._min = minimum 
         self:invokeCallback("minimumChanged", oldValue, minimum)
         if self._value and minimum > self._value then
-            self:invokeCallback("valueChanged", self._value, minimum)
+            local old = self._value
             self._value = minimum
+            self:invokeCallback("valueChanged", old, minimum)
         end
     end
     return oldValue
@@ -76,8 +77,9 @@ function SliderBar:max(maximum) --need to make sure it is higher than the minimu
         self._max = maximum 
         self:invokeCallback("maximumChanged", oldValue, maximum)
         if self._value and maximum < self._value then
-            self:invokeCallback("valueChanged", self._value, maximum)
+            local old = self._value
             self._value = maximum
+            self:invokeCallback("valueChanged", old, maximum)
         end 
     end
     return oldValue
