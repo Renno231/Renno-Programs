@@ -309,12 +309,12 @@ function SortedList:draw() --could make it check to see if its hitting the borde
     end
     if filterValue == "" then filterValue = nil end
 
-    local i, scrollIndex, listValue = 1, self:scroll()
+    local scrollIndex = self:scroll()
     for i, v in pairs (self._list) do
         if #self._shown > height then break end
         if type(i)=='number' and i>=scrollIndex then
             if filterFunc and filterValue then
-                local succ, returned = pcall(filterFunc, filterValue, listValue)
+                local succ, returned = pcall(filterFunc, filterValue, v)
                 if succ then
                     if returned~=nil and returned~=false then
                         table.insert(self._shown, i)
