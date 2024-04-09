@@ -52,7 +52,7 @@ function DropdownList:list(newlist) -- e.g., dropdown:list():sorter(function(...
         if oldValue == nil or newlist~=oldValue then
             --custom callback
             local dropdown = self
-            self._list:callback(function(self, _, eventName, uuid, x, y, button, playerName) 
+            self._list:callback(function(self, _, eventName, uuid, x, y, button, playerName)
                 if eventName == "touch" then
                     local index = self._shown[y - self:absY() + 1 + (self:bordered() and -1 or 0)]
                     if index then
@@ -78,7 +78,7 @@ function DropdownList:drop(value) --boolean or nil
     if self._list and value~=nil then
         self._isDropped = value
         self:invokeCallback(value and "dropped" or "retracted")
-        self._list[self:animatedDrop() and "tweenSize" or "size"](self._list, self:width(), value and (self:listHeight() or #self._list._list) or 0)
+        self._list[self:animatedDrop() and "tweenSize" or "size"](self._list, self:width(), value and (self:listHeight() or #self._list:list()) or 0)
     end
     return oldValue
 end
@@ -146,20 +146,23 @@ function DropdownList:draw()
     local list = self._list
     if not list then return end
     list:width(width)
-    local listValue = tostring(list._list[list:getSelection()[1]] or "") --could or should replace with list:value()
-    if not listValue then return end
-    local formatFunc = list:format()
-    if formatFunc then
-        local succ, returned = pcall(formatFunc, listValue)
-        listValue = (not succ and '(format)' or '') .. returned --should be fine
+    local selected = list:getSelection()[1]
+    local listValue = selected and list:value(selected) --could or should replace with list:value()
+    if listValue ~= nil then
+        local formatFunc = list:format()
+        if formatFunc then
+            local succ, returned = pcall(formatFunc, listValue)
+            listValue = (not succ and '(format)' or '') .. returned --should be fine
+        end
     end
-    listValue = listValue:gsub("\n","; ")
+    
+    listValue = listValue~=nil and tostring(listValue):gsub("\n","; ") or ""
     --append charSet to front of listValue
     local charset = self:charSet()
     if charset then
         listValue = (unicode.charAt(charset, self:drop() and 2 or 1)) .. " " .. listValue
     end
-    self:_gpuset(x, y, unicode.sub(listValue, 1, width-1) ) --do the formatting here
+    self:_gpuset(x, y, unicode.sub(listValue, 1) ) --do the formatting here
 
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
