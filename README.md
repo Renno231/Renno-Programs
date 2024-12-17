@@ -22,3 +22,6 @@ Elliptic Curve Cryptography library OpenComputers port for network security prot
 - install [oppm](https://ocdoc.cil.li/tutorial:program:oppm)
 - run `oppm register Renno231/Renno-Programs`
 - run `oppm -f install ecc`
+
+## Nodemap
+A nodemap utility for pathfinding that can create, save, and import maps of nodes (x,y,z,name).
