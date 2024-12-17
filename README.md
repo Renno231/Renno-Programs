@@ -25,3 +25,9 @@ Elliptic Curve Cryptography library OpenComputers port for network security prot
 
 ## Nodemap
 A nodemap utility for pathfinding that can create, save, and import maps of nodes (x,y,z,name).
+
+## Ebake
+A binfile utility using a mini-lzss decompressor to create bios files. Usage: ebake ChunkNameHere < /path/to/input/file.lua > /path/to/bios.lua Credit: lunar_sam.
+
+## LZSS
+Lossless data compression library. Credit: unknown
