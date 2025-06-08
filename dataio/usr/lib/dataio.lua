@@ -1,11 +1,11 @@
 -- data handler library e.g. dhandler = require"dataio".new(directoryName, serializationLibraryName, serializationLibrary.serialize, serializationLibrary.deserialize)
 local fs = require"filesystem"
 local dataio = {}
-dataio._root = "/usr/data/"
+dataio._rootDir = "/usr/data/"
 dataio.root = function(newRoot)
-    local oldRoot = dataio._root
+    local oldRoot = dataio._rootDir
     if type(newRoot) == "string" then
-        dataio._root = newRoot
+        dataio._rootDir = newRoot
     elseif newRoot ~= nil then
         return false, "invalid root type for ".. tostring(newRoot)
     end
@@ -23,18 +23,18 @@ local function dataHandler(handleName)
     if not fs.exists(fs.concat(dataio.root(), handleName)) then
         fs.makeDirectory(fs.concat(dataio.root(), handleName))
     end
-    local dataHandler = {_handleName = handleName, _root = dataio.root(), _serialLib = "serialization", _serialMethod = "serialize", _deserialMethod = "unserialize"}
+    local dataHandler = {_handleName = handleName, _rootDir = dataio.root(), _serialLib = "serialization", _serialMethod = "serialize", _deserialMethod = "unserialize"}
     dataHandler.getHandle = function()
         return dataHandler._handleName
     end
 
     dataHandler.getPath = function()
-        return fs.concat(dataHandler._root, dataHandler._handleName)
+        return fs.concat(dataHandler._rootDir, dataHandler._handleName)
     end
 
     dataHandler.serializationLib = function(name, serial, deserial, fileType)
         checkArg(1, name, "string", "nil") checkArg(1, serial, "string", "nil") checkArg(1, deserial, "string", "nil")
-        local oldLib, oldSMethod, oldDMethod = dataHandler._serialLib, dataHandler._serialLib, dataHandler._deserialMethod
+        local oldLib, oldSMethod, oldDMethod = dataHandler._serialLib, dataHandler._serialMethod, dataHandler._deserialMethod
         if name and serial and deserial then
             dataHandler._serialLib, dataHandler._serialMethod, dataHandler._deserialMethod = name, serial, deserial
         end
