@@ -306,11 +306,10 @@ function Connection:init(timeout)
     
     -- Wait for connection acknowledgment
     while computer.uptime() - start_time < timeout do
-        os.sleep()
-        
         if self.connected then
             return true
         end
+        os.sleep()
     end
     
     return false, "no response"
