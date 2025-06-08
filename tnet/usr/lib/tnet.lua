@@ -1,3 +1,4 @@
+--ALWAYS do tnet.shutdown() if you are no longer using it because it has event listeners and timers from the OS inside
 local tnet = {}
 local connections = {}
 local listeners = {}
@@ -14,7 +15,6 @@ local pTypeRev, pTypes = {}, {
     ['s'] = "serialLib",
     ['m'] = "data"
 }
-
 for t, f in pairs (pTypes) do
     pTypeRev[f] = t
 end
