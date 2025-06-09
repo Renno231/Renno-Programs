@@ -127,7 +127,7 @@ local function a_star(start, goal)
 end
 
 -- Public API functions
-function nodemap.createNode(x, y, z, name)
+function nodemap.createNode(name, x, y, z)
     assert(name and type(name) == "string", "Node must have a name")
     assert(not nodesByName[name], "Node name must be unique")
     
@@ -212,7 +212,7 @@ function nodemap.findPath(startNode, goalNode)
     local goal = resolveNode(goalNode)
     
     if not (start and goal) then
-        return nil
+        return false, (start == nil and ("%s not found"):format(startNode)) or (goalNode == nil and ("%s not found"):format(startNode)) or ("nodes %s and %s not found"):format(startNode, goalNode)
     end
     
     if not cachedPaths then cachedPaths = {} end
@@ -228,6 +228,69 @@ function nodemap.findPath(startNode, goalNode)
     end
     
     return path
+end
+
+--- Removes redundant nodes from a path.
+-- A node is considered redundant if it lies on a straight line between its predecessor
+-- and successor in the path. The start and end nodes are never removed.
+-- @param path An array of node objects, as returned by findPath.
+-- @param exclusionList (optional) An array of node objects or node names to prevent from being removed.
+-- @return A new path table with redundant nodes removed.
+function nodemap.simplifyPath(path, exclusionList)
+    -- If the path is too short to have any redundant nodes, return it as is.
+    if not path or #path < 3 then
+        return path
+    end
+
+    -- Create a lookup set for the exclusion list for faster checking.
+    local exclusionSet = {}
+    if exclusionList then
+        for _, item in ipairs(exclusionList) do
+            -- The getNodeName helper correctly handles both node objects and strings.
+            local name = getNodeName(item)
+            if name then
+                exclusionSet[name] = true
+            end
+        end
+    end
+
+    local simplifiedPath = {}
+    -- The first node of the path is always kept.
+    table.insert(simplifiedPath, path[1])
+
+    -- The 'anchor' is the last node that was confirmed to be part of the simplified path.
+    -- All subsequent collinearity checks are performed from this anchor.
+    local anchorNode = path[1]
+    local epsilon = 1e-6 -- A small tolerance for floating-point comparisons.
+
+    -- Iterate through the path, checking each intermediate node for redundancy.
+    for i = 2, #path - 1 do
+        local currentNode = path[i]
+        local nextNode = path[i+1]
+        
+        -- A node is kept if it's on the exclusion list, or if it breaks the straight line
+        -- from the current anchor point.
+        local isExcluded = exclusionSet[currentNode.name]
+        
+        -- Check for collinearity: dist(anchor, next) should equal dist(anchor, current) + dist(current, next)
+        local d_direct = dist_between(anchorNode, nextNode)
+        local d_indirect = dist_between(anchorNode, currentNode) + dist_between(currentNode, nextNode)
+        local isCollinear = math.abs(d_direct - d_indirect) < epsilon
+
+        if isExcluded or not isCollinear then
+            -- This node must be kept. Add it to our new path.
+            table.insert(simplifiedPath, currentNode)
+            -- This node now becomes the new anchor for future checks.
+            anchorNode = currentNode
+        end
+        -- If the node is collinear and not excluded, we do nothing. It is skipped,
+        -- and the anchor remains the same, effectively extending the line segment being tested.
+    end
+
+    -- The last node of the path is always kept.
+    table.insert(simplifiedPath, path[#path])
+
+    return simplifiedPath
 end
 
 function nodemap.clearPathCache()
@@ -270,12 +333,59 @@ function nodemap.visualize()
     return table.concat(lines, "\n")
 end
 
+function nodemap.findClosestNode(x, y, z, maxDistance)
+    if #nodes == 0 then
+        return nil, "No nodes in map"
+    end
+    
+    local closest = nil
+    local closestDist = math.huge
+    
+    for _, node in ipairs(nodes) do
+        local distance = dist(x, y, z, node.x, node.y, node.z)
+        if distance < closestDist then
+            closestDist = distance
+            closest = node
+        end
+    end
+    
+    -- If maxDistance is specified, check if the closest node is within range
+    if maxDistance and closestDist > maxDistance then
+        return nil, string.format("Closest node '%s' is too far (%.1f units, max %.1f)", 
+            closest.name, closestDist, maxDistance)
+    end
+    
+    return closest, closestDist
+end
+
+-- Optional: Helper function that also returns all nodes within a certain range
+function nodemap.findNodesInRange(x, y, z, maxDistance)
+    local nodesInRange = {}
+    
+    for _, node in ipairs(nodes) do
+        local distance = dist(x, y, z, node.x, node.y, node.z)
+        if distance <= maxDistance then
+            table.insert(nodesInRange, {
+                node = node,
+                distance = distance
+            })
+        end
+    end
+    
+    -- Sort by distance
+    table.sort(nodesInRange, function(a, b)
+        return a.distance < b.distance
+    end)
+    
+    return nodesInRange
+end
+
 -- Serialization support
 function nodemap.save(mapName)
     if not filesystem.exists(mapDirectory) then
         filesystem.makeDirectory(mapDirectory)
     end
-    mapName = mapName or ("Untitled "..tostring(#filesystem.list(mapDirectory)()))
+    mapName = mapName or ("Untitled "..tostring(#filesystem.list(mapDirectory)()+1))
     local fileName = mapDirectory..(mapName)..".lua"
     local file, err = io.open(fileName, "w")
     if not file then return false, err end
@@ -371,6 +481,19 @@ function nodemap.exists(mapName)
     local fileName = mapDirectory..(mapName)..".lua"
     return filesystem.exists(fileName)
 end
+
+function nodemap.getNodeCoordinates(node)
+    if type(node) == "string" then
+        local node = resolveNode(node)
+        if node then
+            return node.x, node.y, node.z
+        end
+    elseif type(node) == "table" then
+        return node.x, node.y, node.z
+    end
+end
+
+nodemap.getNodeByName = resolveNode
 
 function nodemap.getMapName()
     return currentMapName
