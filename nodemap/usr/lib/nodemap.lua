@@ -143,7 +143,7 @@ function nodemap.createNode(name, x, y, z)
     connections[name] = {}
     return node
 end
-
+-- might need to add returns to this and not use assert
 function nodemap.link(nodeA, nodeB)
     local nameA = getNodeName(nodeA)
     local nameB = getNodeName(nodeB)
@@ -464,7 +464,7 @@ function nodemap.listMaps()
     end
 
     local maps = {}
-    for file in filesystem.list(mapDirectory)() do
+    for file in filesystem.list(mapDirectory) do
         -- Remove .lua extension if it exists
         local mapName = file:match("(.+)%.lua$")
         if mapName then
