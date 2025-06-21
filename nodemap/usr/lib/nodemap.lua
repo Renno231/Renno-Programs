@@ -65,13 +65,19 @@ local function remove_node_from_set(set, theNode)
     end
 end
 
-local function unwind_path(flat_path, map, current_node)
-    if map[current_node] then
-        table.insert(flat_path, 1, map[current_node])
-        return unwind_path(flat_path, map, map[current_node])
-    else
-        return flat_path
+local function unwind_path(map, goal_node)
+    local path = {}
+    local current = goal_node
+    
+    -- came_from[start_node] will be nil, so the loop stops there.
+    while map[current] do
+        -- Prepend the node that came before the current one
+        table.insert(path, 1, map[current])
+        -- Move to the previous node for the next loop iteration
+        current = map[current]
     end
+    
+    return path
 end
 
 -- Get connected neighbors of a node
@@ -99,7 +105,8 @@ local function a_star(start, goal)
     while #openset > 0 do
         local current = lowest_f_score(openset, f_score)
         if current == goal then
-            local path = unwind_path({}, came_from, goal)
+            -- MODIFIED LINE: Call the new, simpler unwind_path
+            local path = unwind_path(came_from, goal)
             table.insert(path, goal)
             return path
         end
@@ -399,7 +406,7 @@ function nodemap.save(mapName)
         end
     end
 
-    local mapData = string.format("return %s, %s",
+    local mapData = string.format("%s, %s",
         serial.serialize(nodes),
         serial.serialize(serializableConnections)
     )
