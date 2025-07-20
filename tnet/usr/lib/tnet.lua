@@ -1,4 +1,3 @@
---ALWAYS do tnet.shutdown() if you are no longer using it because it has event listeners and timers from the OS inside
 local tnet = {}
 local connections = {}
 local listeners = {}
@@ -15,6 +14,17 @@ local pTypeRev, pTypes = {}, {
     ['s'] = "serialLib",
     ['m'] = "data"
 }
+
+local function makeId()
+    -- 4 chars from this computer
+    local base, n, id = computer.address():sub(-8,-5), 0
+    repeat
+        id = base .. string.format("%04x", n % 0x10000)
+        n = n + 1
+    until not connections[id]
+    return id
+end
+
 for t, f in pairs (pTypes) do
     pTypeRev[f] = t
 end
@@ -26,11 +36,11 @@ Connection.__index = Connection
 local function startTimeoutChecker()
     if tnet.timeoutClock then return end
     tnet.timeoutClock = event.timer(1, function()
-        local current_time = computer.uptime()
+        local now = computer.uptime()
         for _, conn in pairs(connections) do
             -- Check connection-level timeout
             if conn.connection_timeout and conn.last_activity then
-                if current_time - conn.last_activity > conn.connection_timeout then
+                if now - conn.last_activity > conn.connection_timeout then
                     if conn.on_error then
                         pcall(conn.on_error, "Connection timeout")
                     end
@@ -40,7 +50,7 @@ local function startTimeoutChecker()
 
             -- Check message-specific timeouts
             for msg_id, cb in pairs(conn.expectations) do
-                if cb.timeout and current_time - cb.registered > cb.timeout then
+                if cb.timeout and (now - cb.registered > cb.timeout) then
                     if conn.on_error then
                         pcall(conn.on_error, "Timeout waiting for response: " .. msg_id)
                     end
@@ -50,7 +60,7 @@ local function startTimeoutChecker()
 
             -- Check default callback timeout
             if conn.default_callback and conn.default_callback.timeout then
-                if current_time - conn.default_callback.registered > conn.default_callback.timeout then
+                if now - conn.default_callback.registered > conn.default_callback.timeout then
                     if conn.on_error then
                         pcall(conn.on_error, "Default callback timeout")
                     end
@@ -320,6 +330,7 @@ function Connection:close(quiet)
         local ninfo = table.concat({self.sys, self.id, "0", pTypeRev["disconnect"]}, ",")
         pcall(self.modem.send, self.address, self.port, self.wake, ninfo)
     end
+    self.default_callback = nil
     connections[self.id] = nil
     self.connected = false
 end
@@ -349,7 +360,7 @@ function tnet.connect(address, port, wake, sys, conn_id, wakeValidator)
         port = port,
         wake = wake or computer.address(),
         sys = sys or "unknown",
-        id = conn_id or uuid.next():sub(-12),
+        id = conn_id or makeId(),
         expectations = {},
         default_callback = nil,
         connection_timeout = nil,
