@@ -31,6 +31,25 @@ end
 -- Connection object
 local Connection = {}
 Connection.__index = Connection
+local function newConnection(fields)
+    return setmetatable({
+        modem        = fields.modem,
+        address      = fields.address,
+        port         = fields.port,
+        wake         = fields.wake,
+        sys          = fields.sys or "unknown",
+        id           = fields.id,
+        expectations = {},
+        default_callback = nil,
+        connection_timeout = nil,
+        last_activity = computer.uptime(),
+        on_error     = nil,
+        serial       = nil,
+        connected    = fields.connected or false,
+        msg_id       = 0,
+        wakeValidator = fields.wakeValidator
+    }, Connection)
+end
 
 -- Timeout checker - only checks existing connections
 local function startTimeoutChecker()
@@ -104,23 +123,16 @@ local function initRouter()
             end
             
             -- Create new connection for this client
-            local conn = setmetatable({
-                modem = component.modem,
+            local conn = newConnection({
+                modem   = component.modem,
                 address = senderAddress,
-                port = localPort,
-                wake = wake,
-                sys = sys_name,
-                id = conn_id,
-                expectations = {},
-                default_callback = nil,
-                connection_timeout = nil,
-                last_activity = computer.uptime(),
-                on_error = nil,
-                serial = nil,
-                connected = true,
-                msg_id = 0,
+                port    = localPort,
+                wake    = wake,
+                sys     = sys_name,
+                id      = conn_id,
+                connected = true,          -- because server side is already live
                 wakeValidator = listener.wakeValidator
-            }, Connection)
+            })
             
             connections[conn_id] = conn
             
@@ -354,23 +366,15 @@ function tnet.connect(address, port, wake, sys, conn_id, wakeValidator)
         error("No modem component found")
     end
     
-    local conn = setmetatable({
-        modem = modem,
+    local conn = newConnection({
+        modem   = modem,
         address = address,
-        port = port,
-        wake = wake or computer.address(),
-        sys = sys or "unknown",
-        id = conn_id or makeId(),
-        expectations = {},
-        default_callback = nil,
-        connection_timeout = nil,
-        last_activity = computer.uptime(),
-        on_error = nil,
-        serial = nil,
-        connected = false,
-        msg_id = 0,
+        port    = port,
+        wake    = wake or computer.address(),
+        sys     = sys or "unknown",
+        id      = conn_id or makeId(),
         wakeValidator = wakeValidator
-    }, Connection)
+    })
 
     connections[conn.id] = conn
     
