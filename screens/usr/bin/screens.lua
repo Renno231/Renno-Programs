@@ -2,6 +2,9 @@ local screens = require("screens")
 local component = require("component")
 local computer = require("computer")
 local shell = require("shell")
+local term = require("term")
+local event = require("event")
+local io = require("io")
 
 local function printUsage()
     print("Usage:")
@@ -9,6 +12,8 @@ local function printUsage()
     print("  screens getMain - Show the main screen")
     print("  screens setMain <labelOrAddress> - Set the main screen")
     print("  screens rename <labelOrAddress> <newLabel> - Rename a screen")
+    print("  screens cleanup - Remove screens that are no longer available")
+    print("  screens onTouch - Register the next touched screen")
     print("  screens help - Show this help message")
     print()
     print("Registered Screens:")
@@ -169,6 +174,67 @@ local function renameScreen(labelOrAddress, newLabel)
     end
 end
 
+local function onTouch()
+    print("Please touch a screen to register it (Ctrl+C to cancel)...")
+    
+    -- Create a filter that accepts touch and interrupted events
+    local function filter(name, ...)
+        return name == "touch" or name == "interrupted"
+    end
+    
+    -- Wait for a touch or interrupted event
+    local eventData = {event.pullFiltered(filter)}
+    if not eventData or #eventData < 1 then
+        print("Error: Invalid event received")
+        return
+    end
+    
+    -- Check if it's an interrupted event
+    if eventData[1] == "interrupted" then
+        print("Registration cancelled")
+        return
+    end
+    
+    -- Extract the screen address (second element in touch event)
+    local screenAddress = eventData[2]
+    
+    -- Check if the screen is already registered
+    local resolved, result = screens.resolve(screenAddress)
+    if resolved then
+        print("Screen is already registered as: " .. result)
+        return
+    end
+    print(("Touch detected on %s"):format(screenAddress))
+    -- Ask for a name
+    term.write("Enter a name for this screen (leave empty for auto-generated name): ")
+    local input = io.read()
+    if input == false then
+        return print("Registration cancelled")
+    end
+    -- If input is empty, generate a name
+    local label
+    if input == "" then
+        -- Generate a name using the same convention as in registerScreens
+        local nextIndex = 1
+        repeat
+            label = "s" .. nextIndex
+            nextIndex = nextIndex + 1
+            -- Check if label is already in use
+            local labelResolved, _ = screens.resolve(label)
+        until not labelResolved
+    else
+        label = input
+    end
+    
+    -- Register the screen
+    local success, result = screens.register(screenAddress, label)
+    if success then
+        print("Screen registered successfully as: " .. label)
+    else
+        print("Failed to register screen: " .. result)
+    end
+end
+
 -- Parse command line arguments
 local args = shell.parse(...)
 local command = args[1]
@@ -193,6 +259,8 @@ elseif command == "rename" then
     renameScreen(args[2], args[3])
 elseif command == "cleanup" then
     cleanupScreens()
+elseif command == "onTouch" then
+    onTouch()
 elseif command == "help" or not command then
     printUsage()
     listScreens()
