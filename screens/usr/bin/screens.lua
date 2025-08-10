@@ -32,6 +32,32 @@ local function listScreens()
     end
 end
 
+local function cleanupScreens()
+    local registeredScreens = screens.getScreens()
+    local removedCount = 0
+    
+    for _, screen in ipairs(registeredScreens) do
+        -- Check if the screen component still exists
+        local proxy = component.proxy(screen.address)
+        if not proxy then
+            -- Screen is no longer available, unregister it
+            local success, result = screens.unregister(screen.address)
+            if success then
+                print("Unregistered screen: " .. screen.label .. " - " .. screen.address)
+                removedCount = removedCount + 1
+            else
+                print("Failed to unregister screen: " .. screen.label .. " - " .. screen.address .. ": " .. result)
+            end
+        end
+    end
+    
+    if removedCount == 0 then
+        print("No screens needed to be removed")
+    else
+        print("Removed " .. removedCount .. " screen(s) that are no longer available")
+    end
+end
+
 local function registerScreens()
     -- Get all screen components using the filter
     local allScreens = {}
@@ -165,6 +191,8 @@ elseif command == "rename" then
         listScreens()
     end
     renameScreen(args[2], args[3])
+elseif command == "cleanup" then
+    cleanupScreens()
 elseif command == "help" or not command then
     printUsage()
     listScreens()
