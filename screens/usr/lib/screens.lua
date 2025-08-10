@@ -169,8 +169,32 @@ function screens.getMain()
     return true, label, _main
 end
 
+-- Function to get the currently bound screen
+function screens.getCurrentScreen()
+    local gpu = require("component").gpu
+    if not gpu then
+        return false, "No GPU component"
+    end
+    
+    -- Get the address of the currently bound screen
+    local address = gpu.getScreen()
+    if not address then
+        return false, "No screen bound to GPU"
+    end
+    
+    -- Try to resolve the address to a label
+    local resolved, result = screens.resolve(address)
+    if resolved then
+        -- The result is the label
+        return true, result, address
+    else
+        -- The screen is not registered, but we can still return the address
+        return false, "Screen not registered", address
+    end
+end
+
 -- Function to bind to a screen
-function screens.bindTo(labelOrAddress, clearScreen)
+function screens.bindTo(labelOrAddress, resetScreen)
     local gpu = component.gpu
     if not gpu then
         return false, "No GPU component"
@@ -181,7 +205,7 @@ function screens.bindTo(labelOrAddress, clearScreen)
         local success, label, address = screens.getMain()
         if success then
             if component.proxy(address) then
-                gpu.bind(address, clearScreen)
+                gpu.bind(address, resetScreen)
                 return true, label, address
             else
                 return false, string.format("component not found %s", address)
@@ -207,7 +231,7 @@ function screens.bindTo(labelOrAddress, clearScreen)
     
     -- Bind to the screen
     if component.proxy(address) then
-        gpu.bind(address, clearScreen)
+        gpu.bind(address, resetScreen)
     else
         return false, string.format("component not found %s", address)
     end
