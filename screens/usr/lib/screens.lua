@@ -51,7 +51,7 @@ function screens._load()
 end
 
 -- Initialize by loading data
-print("screens loaded", require"serialization".serialize(screens:_load(), 100))
+screens:_load()
 
 -- Function to get a list of screen components
 function screens.getScreens()
