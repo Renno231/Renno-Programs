@@ -2,7 +2,7 @@ local path, ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT = ...
 if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
     error((path or "arith.lua").." is a private sublibrary of ecc, use the ecc library instead")
 end
-
+local math, assert, type, table = math, assert, type, table --local scope variable caching is 26x faster
 -- Big integer arithmetic for 168-bit (and 336-bit) numbers
 -- Numbers are represented as little-endian tables of 24-bit integers
 local arith = {}

@@ -20,6 +20,7 @@ local bnot    = bit32.bnot
 local bxor    = bit32.bxor
 local blshift = bit32.lshift
 local upack   = table.unpack
+local ceil    = math.ceil
 
 local function rrotate(n, b)
     local s = n/(2^b)
@@ -66,7 +67,7 @@ local function preprocess(data)
     local proc = {}
     data[#data+1] = 0x80
     while #data%64~=56 do data[#data+1] = 0 end
-    local blocks = math.ceil(#data/64)
+    local blocks = ceil(#data/64)
     for i = 1, blocks do
         proc[i] = {}
         for j = 1, 16 do

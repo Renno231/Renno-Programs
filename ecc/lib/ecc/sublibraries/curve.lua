@@ -3,7 +3,7 @@ local path, ecc, mapToStr, lazyLoad, strToByteArr, byteTableMT = ...
 if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
     error((path or "curve.lua").."is a private sublibrary of ecc, use the ecc library instead")
 end
-local unpack = table.unpack
+local unpack, setmetatable, assert, type = table.unpack, setmetatable, assert, type
 
 -- Elliptic curve arithmetic
 local curve = {}

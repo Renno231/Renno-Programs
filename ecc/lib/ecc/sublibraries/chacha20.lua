@@ -3,7 +3,7 @@ if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
     error((path or "chacha20.lua").."is a private sublibrary of ecc, use the ecc library instead")
 end
 
-local unpack = table.unpack
+local unpack, math, tonumber, assert, os = table.unpack, math, tonumber, assert, os
 local bit32 = require("bit32")
 -- Chacha20 cipher in ComputerCraft
 -- By Anavrins
