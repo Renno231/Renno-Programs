@@ -1,10 +1,10 @@
 local tnet = {}
 local connections = {}
 local listeners = {}
-local uuid = require("uuid")
 local event = require("event")
 local computer = require("computer")
 local component = require("component")
+local pack = table.pack
 
 -- Packet type lookup table for shorter messages
 local pTypeRev, pTypes = {}, {
@@ -86,43 +86,44 @@ local function startTimeoutChecker()
                     conn.default_callback = nil
                 end
             end
+
+            if conn._fragBuffer and conn._fragBuffer.lastFragTime then
+                if now - conn._fragBuffer.lastFragTime > 10 then
+                    if conn.on_error then
+                        pcall(conn.on_error, "Fragment buffer timeout (incomplete data)")
+                    end
+                    conn._fragBuffer = nil
+                end
+            end
         end
     end, math.huge)
 end
 
--- Router - fixed logic to properly handle connections and listeners
 local function initRouter()
     if tnet.routerEventID then return end
     tnet.routerFunction = function(_, selfAddress, senderAddress, localPort, dist, wake, ninfo, msg, ...)
         wake, ninfo, msg = wake or "", ninfo or "", msg or ""
-        -- Parse network information using split
         local ninfo_parts = {}
         for part in string.gmatch(ninfo, "[^,]+") do
             table.insert(ninfo_parts, part)
         end
+        
         if #ninfo_parts < 4 then
             return
         end
         
-        local sys_name, conn_id, msg_id, packet_type = table.unpack(ninfo_parts)
-        
-        -- Resolve packet type (support both short and long forms)
+        local sys_name, conn_id, msg_id, packet_type, frag, maxFrag = table.unpack(ninfo_parts)
         packet_type = pTypes[packet_type] or packet_type
-        local args = {...}
-        
-        -- Handle new connection requests to listeners
+        local args = pack(...)
         if packet_type == "connect" and listeners[localPort] then
             local listener = listeners[localPort]
-            
-            -- Validate wake message if validator exists
             if listener.wakeValidator then
                 local valid, result = pcall(listener.wakeValidator, wake)
                 if not valid or not result then
-                    return -- Reject connection
+                    return
                 end
             end
             
-            -- Create new connection for this client
             local conn = newConnection({
                 modem   = component.modem,
                 address = senderAddress,
@@ -135,21 +136,16 @@ local function initRouter()
             })
             
             connections[conn_id] = conn
-            
-            -- Send acknowledgment
             local ack_ninfo = table.concat({conn.sys or "server", conn.id, "0", pTypeRev["connected"]}, ",")
             pcall(conn.modem.send, senderAddress, localPort, wake, ack_ninfo)
-            -- Notify listener
             if listener.callback then
                 pcall(listener.callback, conn)
             end
             return
         end
         
-        -- Handle messages for existing connections
         local conn = connections[conn_id]
         if conn and conn.address == senderAddress and conn.sys == sys_name then
-            -- Validate wake message
             if conn.wakeValidator then
                 local valid, result = pcall(conn.wakeValidator, wake)
                 if not valid or not result then
@@ -168,8 +164,24 @@ local function initRouter()
                     decode = args[2]
                 }
             elseif packet_type == "data" then
-                conn:handleMessage(msg_id, msg, table.unpack(args))
+                if frag and maxFrag then
+                    frag, maxFrag = tonumber(frag), tonumber(maxFrag)
+                    local fBuffer = conn._fragBuffer or {fragCount = 0}
+                    conn._fragBuffer = fBuffer
+                    fBuffer.lastFragTime = computer.uptime()
+                    if not fBuffer[frag] then
+                        fBuffer[frag] = args[1]
+                        fBuffer.fragCount = fBuffer.fragCount + 1
+                    end
+                    if fBuffer.fragCount == maxFrag then
+                        conn:handleMessage(msg_id, msg, table.concat(fBuffer))
+                        conn._fragBuffer = nil
+                    end
+                else
+                    conn:handleMessage(msg_id, msg, table.unpack(args,1,args.n))
+                end
             end
+        else
         end
     end
     tnet.routerEventID = event.listen("modem_message", tnet.routerFunction)
@@ -177,7 +189,7 @@ end
 
 function Connection:handleMessage(msg_id, msg, ...)
     self.last_activity = computer.uptime()
-    local args = {...}
+    local args = pack(...)
 
     -- Handle serialization
     if self.serial then
@@ -211,7 +223,7 @@ function Connection:handleMessage(msg_id, msg, ...)
         end
 
         -- Execute callback
-        local success, err = pcall(cb_data.callback, self, msg, table.unpack(args))
+        local success, err = pcall(cb_data.callback, self, msg, table.unpack(args,1,args.n))
         if not success and self.on_error then
             pcall(self.on_error, "Callback error (" .. msg .. "): " .. tostring(err))
         end
@@ -229,7 +241,7 @@ function Connection:handleMessage(msg_id, msg, ...)
         end
 
         -- Execute default callback
-        local success, err = pcall(self.default_callback.callback, self, msg, table.unpack(args))
+        local success, err = pcall(self.default_callback.callback, self, msg, table.unpack(args,1,args.n))
         if not success and self.on_error then
             pcall(self.on_error, "Default callback error: " .. tostring(err))
         end
@@ -238,14 +250,12 @@ end
 
 function Connection:expect(arg1, arg2, arg3, arg4)
     if type(arg1) == "function" then
-        -- Default callback: expect(callback, timeout)
         self.default_callback = {
             callback = arg1,
             timeout = arg2,
             registered = computer.uptime()
         }
     else
-        -- Specific callback: expect(msg_name, callback, timeout, persistent)
         self.expectations[arg1] = {
             callback = arg2,
             timeout = arg3,
@@ -276,9 +286,7 @@ function Connection:send(msg, ...)
     end
     
     self.msg_id = self.msg_id + 1
-    local args = {...}
-
-    -- Apply serialization
+    local args = pack(...)
     if self.serial then
         local gotLibrary, serialLib = pcall(require, self.serial.lib)
         if gotLibrary then
@@ -301,39 +309,50 @@ function Connection:send(msg, ...)
             return nil
         end
     end
-
     -- Send message
-    local ninfo = table.concat({self.sys, self.id, self.msg_id, pTypeRev["data"]}, ",")
-    local success = pcall(self.modem.send, self.address, self.port, self.wake, ninfo, msg, table.unpack(args))
-    
+    local ninfo, single = table.concat({self.sys, self.id, self.msg_id, pTypeRev["data"]}, ","), true
+    local success, failed
+    if self.serial then --fragmentation only with serialization set
+        local dataMax = 8192 - (#self.wake + #ninfo + #msg + 20) -- extra 20 bits just in case
+        local dataSize = #args[1]+2
+        if dataMax < dataSize then
+            single = false
+            local totalFrags = math.ceil(dataSize / dataMax)
+            for cFrag = 1, totalFrags do
+                success, failed = pcall(self.modem.send, self.address, self.port, self.wake,
+                                        ninfo..","..tostring(cFrag)..","..tostring(totalFrags), msg, args[1]:sub((cFrag-1) * dataMax + 1, cFrag * dataMax))
+                if not success then break end
+            end
+        end
+    end
+    if single then
+        success, failed = pcall(self.modem.send, self.address, self.port, self.wake, ninfo, msg, table.unpack(args,1,args.n))
+    end
     if not success then
         if self.on_error then
-            pcall(self.on_error, "Send failed")
+            pcall(self.on_error, "Send failed" .. failed)
         end
         return nil
     end
-
     return self.msg_id
-end
+end 
 
 function Connection:init(timeout)
     timeout = timeout or 1
     local start_time = computer.uptime()
     
-    -- Send connection request with proper packet type
     local ninfo = table.concat({self.sys, self.id, "0", pTypeRev["connect"]}, ",")
-    
     pcall(self.modem.open, self.port)
     pcall(self.modem.send, self.address, self.port, self.wake, ninfo)
     
-    -- Wait for connection acknowledgment
+    -- local loop_count = 0
     while computer.uptime() - start_time < timeout do
+        -- loop_count = loop_count + 1
         if self.connected then
             return true
         end
         os.sleep()
     end
-    
     return false, "no response"
 end
 
@@ -396,14 +415,18 @@ function tnet.listen(port, callback, wakeValidator)
     end
     
     modem.open(port)
+
     listeners[port] = {
         callback = callback,
         wakeValidator = wakeValidator
     }
     
-    -- Initialize router if needed
-    if not tnet.routerEventID then initRouter() end
-    if not tnet.timeoutClock then startTimeoutChecker() end
+    if not tnet.routerEventID then 
+        initRouter() 
+    end
+    if not tnet.timeoutClock then 
+        startTimeoutChecker() 
+    end
     
     return true
 end
