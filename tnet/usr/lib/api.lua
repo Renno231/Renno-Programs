@@ -2,6 +2,11 @@ local api = {}
 local tnet = require("tnet")
 local computer = require("computer")
 local table = table
+local currentCaller
+-- Valid only until the handler first yields; capture immediately.
+function api.caller()
+    return currentCaller
+end
 -- Active exposed endpoints (servers)
 api.endpoints = {}
 -- Active client proxies
@@ -31,6 +36,7 @@ function api.expose(name, target, port, keys)
         functionKeys = {},     -- fnName → required key
         functionDocs = {},     -- fnName → description
         connections = {},      -- address → connection object
+        connectCallbacks = {},
         listening = false,     -- Track if endpoint is listening
         sDeny = true           -- do not send access denied
     }, Endpoint)
@@ -69,7 +75,10 @@ function api.expose(name, target, port, keys)
             elseif msgType == RPC_TYPE_PING then
                 c:send("rpc", RPC_TYPE_PING, "pong")
             end
-        end)
+        end, nil, true)
+        for _, callback in ipairs(endpoint.connectCallbacks) do
+            pcall(callback, conn)
+        end
     end, function(wake)
         -- maybe there should be some distinction between the endpoint access key and the device key
         return not endpoint.accessKey or wake == endpoint.accessKey
@@ -87,6 +96,12 @@ end
 
 function Endpoint:setAccessKey(key)
     self.accessKey = key
+end
+
+function Endpoint:onConnect(callback)
+    assert(type(callback) == "function", "Connection callback must be a function")
+    self.connectCallbacks[#self.connectCallbacks + 1] = callback
+    return self
 end
 
 function Endpoint:setFunctionKeys(fnName, keys)
@@ -140,7 +155,10 @@ function Endpoint:handleCall(conn, fnName, callId, args, callKey)
         end
     end
     
-    conn:send("rpc", RPC_TYPE_RESPONSE, callId, table.pack(pcall(self.lib[fnName], table.unpack(args or {}))))
+    currentCaller = conn
+    local response = table.pack(pcall(self.lib[fnName], table.unpack(args or {}, 1, args and args.n or # (args or {}))))
+    currentCaller = nil
+    conn:send("rpc", RPC_TYPE_RESPONSE, callId, response)
 end
 
 function Endpoint:sendDoc(conn, callId)
@@ -200,6 +218,24 @@ function api.connect(endpointName, port, address, wakeKey, timeout, fnKeys)
         timeout = timeout,
         connected = true  -- Track connection state
     }, RemoteProxy)
+
+    proxy.pending = {}
+    proxy.callSequence = 0
+    conn:expect("rpc", function(_, _, msgType, callId, response, errorMsg)
+        local call = proxy.pending[callId]
+        if not call or msgType ~= call.responseType then return end
+        proxy.pending[callId] = nil
+        call.response, call.error, call.received = response, errorMsg, true
+        if call.timer then require("event").cancel(call.timer) end
+        if call.callback then
+            local result = errorMsg and table.pack(false, errorMsg) or response
+            if type(result) == "table" then
+                call.callback(table.unpack(result, 1, result.n or #result))
+            else
+                call.callback(result)
+            end
+        end
+    end, nil, true)
     
     local clientKey = address .. ":" .. port .. "/" .. endpointName
     api.clients[clientKey] = proxy
@@ -223,30 +259,28 @@ function RemoteProxy:setFnKeyTable(newKeys) --functionName = key
 end
 
 function RemoteProxy:refreshDocumentation()
-    local callId = computer.uptime() .. "-" .. math.random(1000, 9999)
-    local received = false
-    local doc, err
-    self.conn:expect(callId, function(_, result, error_msg)
-        received = true
-        if error_msg then
-            err = error_msg
-        else
-            doc = result
-        end
-    end, 5)
+    local callId = self:nextCallId()
+    local call = {responseType = RPC_TYPE_DOC_RESPONSE}
+    self.pending[callId] = call
     self.conn:send("rpc", RPC_TYPE_DOC_REQUEST, callId)
     local start = computer.uptime()
-    while computer.uptime() - start < 5 and not received do
+    while computer.uptime() - start < 5 and not call.received do
         os.sleep()
     end
-    if not received then
+    self.pending[callId] = nil
+    if not call.received then
         error("Timeout fetching documentation")
     end
-    if err then
-        error("Error fetching documentation: " .. err)
+    if call.error then
+        error("Error fetching documentation: " .. call.error)
     end
-    self.doc = doc
-    return doc
+    self.doc = call.response
+    return self.doc
+end
+
+function RemoteProxy:nextCallId()
+    self.callSequence = self.callSequence + 1
+    return tostring(self.callSequence)
 end
 
 -- Metamethod to allow remote.fn() syntax
@@ -291,7 +325,7 @@ function RemoteProxy:async(callback)
                 end
                 
                 -- Execute internally with the callback
-                return self:callRemoteFunctionInternal(fnName, callKey, callback, ...)
+                return self:callRemoteFunction(fnName, callKey, callback, ...)
             end
         end
     })
@@ -302,25 +336,14 @@ function RemoteProxy:callRemoteFunction(fnName, callKey, asyncCallback, ...)
         error("Connection is closed")
     end
     
-    local callId = computer.uptime() .. "-" .. math.random(1000, 9999)
-    local received, isAsync = false, type(asyncCallback) == "function"
-    local result, err
-    
-    self.conn:expect("rpc", function(_, _, msgType, responseCallId, response, errorMsg)
-        if msgType == RPC_TYPE_RESPONSE and responseCallId == callId then
-            --print("DEBUG callRemoteFunction 8 - Matching response received")
-            result = errorMsg and {false, errorMsg} or response
-            if isAsync then
-                if type(result) == "table" then
-                    asyncCallback(table.unpack(result, 1, result.n))
-                else
-                    asyncCallback(result)
-                end
-            else
-                received = true
-            end
-        end
-    end, 10)
+    local callId = self:nextCallId()
+    local isAsync = type(asyncCallback) == "function"
+    local call = {responseType = RPC_TYPE_RESPONSE, callback = isAsync and asyncCallback or nil}
+    self.pending[callId] = call
+    if isAsync then
+        -- Preserve the existing silent async timeout, but release its pending slot.
+        call.timer = require("event").timer(10, function() self.pending[callId] = nil end)
+    end
     
     local args = table.pack(...)
     self.conn:send("rpc", RPC_TYPE_CALL, fnName, callId, args, callKey)
@@ -330,18 +353,18 @@ function RemoteProxy:callRemoteFunction(fnName, callKey, asyncCallback, ...)
     end
 
     local start = computer.uptime()
-    local loopCount = 0
-    while computer.uptime() - start < 10 and not received do
-        loopCount = loopCount + 1
+    while computer.uptime() - start < 10 and not call.received do
         os.sleep()
     end
     
-    if not received then
+    self.pending[callId] = nil
+    if not call.received then
         return false, ("Timeout calling remote function: " .. fnName)
     end
     
+    local result = call.error and table.pack(false, call.error) or call.response
     if type(result) == "table" then
-        return table.unpack(result, 1, result.n)
+        return table.unpack(result, 1, result.n or #result)
     else
         return result
     end
@@ -356,6 +379,10 @@ function RemoteProxy:close()
     
     self.conn:close()
     self.connected = false
+    for _, call in pairs(self.pending) do
+        if call.timer then require("event").cancel(call.timer) end
+    end
+    self.pending = {}
     
     -- Remove from global registry
     local clientKey = self.address .. ":" .. self.port .. "/" .. self.endpoint

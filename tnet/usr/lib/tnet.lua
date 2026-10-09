@@ -15,12 +15,13 @@ local pTypeRev, pTypes = {}, {
     ['m'] = "data"
 }
 
+local nextId = 0
 local function makeId()
     -- 4 chars from this computer
-    local base, n, id = computer.address():sub(-8,-5), 0
+    local base, id = computer.address():sub(-8,-5)
     repeat
-        id = base .. string.format("%04x", n % 0x10000)
-        n = n + 1
+        id = base .. string.format("%04x", nextId % 0x10000)
+        nextId = nextId + 1
     until not connections[id]
     return id
 end
