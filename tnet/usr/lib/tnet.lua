@@ -45,6 +45,7 @@ local function newConnection(fields)
         connection_timeout = nil,
         last_activity = computer.uptime(),
         on_error     = nil,
+        on_close     = nil,
         serial       = nil,
         connected    = fields.connected or false,
         msg_id       = 0,
@@ -274,6 +275,11 @@ function Connection:onError(callback)
     self.on_error = callback
 end
 
+-- Called once when an open connection closes: by close(), a timeout or the peer's disconnect.
+function Connection:onClose(callback)
+    self.on_close = callback
+end
+
 function Connection:setWakeValidator(validator)
     self.wakeValidator = validator
 end
@@ -358,6 +364,7 @@ function Connection:init(timeout)
 end
 
 function Connection:close(quiet)
+    local wasConnected = self.connected
     if self.connected and not quiet then
         local ninfo = table.concat({self.sys, self.id, "0", pTypeRev["disconnect"]}, ",")
         pcall(self.modem.send, self.address, self.port, self.wake, ninfo)
@@ -365,6 +372,9 @@ function Connection:close(quiet)
     self.default_callback = nil
     connections[self.id] = nil
     self.connected = false
+    if wasConnected and self.on_close then
+        pcall(self.on_close)
+    end
 end
 
 function Connection:serialLib(lib, encode, decode)
