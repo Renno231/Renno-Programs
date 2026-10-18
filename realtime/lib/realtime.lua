@@ -2,10 +2,10 @@ local tempFile = "/tmp/.time"
 local fs = require("filesystem")
 local computer = require"computer"
 
-local lastPolledTime = 0
+local lastPolledTime = 0,0
 local lastTime = nil
 local function lastChanged(filepath)
-    return (fs.lastModified(filepath) / 1000) - 18000
+    return (fs.lastModified(filepath) / 1000)
 end
 
 local function sync()

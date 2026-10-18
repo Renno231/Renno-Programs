@@ -105,8 +105,12 @@ function M.decompress(input)
 
         local flag_bit = 1
         for i = 1, 8 do
-            if offset > input_len then break end
-            
+            if offset > input_len then
+                -- A valid final group has a token for every set flag bit, and at least one token.
+                if i == 1 or flags >= flag_bit then error("Truncated LZSS token group") end
+                break
+            end
+
             local str
             if (flags & flag_bit) ~= 0 then -- Literal
                 str = sub(input, offset, offset)
@@ -121,7 +125,8 @@ function M.decompress(input)
                     
                     local virtual_window_start = max(1, window_len - POS_SIZE + 1)
                     local real_pos = virtual_window_start + pos - 1
-                    
+                    if real_pos > window_len then error("Invalid LZSS back-reference") end
+
                     if (real_pos + len - 1) <= window_len then
                         str = sub(window, real_pos, real_pos + len - 1)
                     else
@@ -129,6 +134,8 @@ function M.decompress(input)
                         local repeats = ceil(len / #pattern)
                         str = sub(rep(pattern, repeats), 1, len)
                     end
+                else
+                    error("Truncated LZSS back-reference")
                 end
             end
             
