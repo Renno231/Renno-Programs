@@ -21,7 +21,8 @@ local RPC_TYPE_PING = "rpc_ping"
 -- SERVER SIDE
 local Endpoint = {}
 Endpoint.__index = Endpoint
-function api.expose(name, target, port, keys)
+-- modem: the address of the only card that hears this endpoint; the primary card when omitted.
+function api.expose(name, target, port, keys, modem)
     local lib = type(target) == "string" and require(target) or target
     
     if type(lib) ~= "table" then
@@ -82,7 +83,7 @@ function api.expose(name, target, port, keys)
     end, function(wake)
         -- maybe there should be some distinction between the endpoint access key and the device key
         return not endpoint.accessKey or wake == endpoint.accessKey
-    end)
+    end, modem)
     
     if not success then
         error("Failed to listen on port " .. port .. ": " .. err)
@@ -198,14 +199,16 @@ end
 -- CLIENT SIDE
 local RemoteProxy = {}
 RemoteProxy.__index = RemoteProxy
-function api.connect(endpointName, port, address, wakeKey, timeout, fnKeys)
+-- modem: the address of the card that reaches address; the primary card when omitted.
+function api.connect(endpointName, port, address, wakeKey, timeout, fnKeys, modem)
     timeout = timeout or 5
     
-    local conn = tnet.connect(address, port, wakeKey, "api_client")
+    local conn = tnet.connect(address, port, wakeKey, "api_client", nil, nil, modem)
     conn.serial = {lib = "serialization", encode = "serialize", decode = "unserialize"}
     
     local success, err = conn:init(timeout)
     if not success then
+        conn:close(true)
         error("Failed to connect to " .. address .. ":" .. port .. " - " .. (err or "timeout"))
     end
     

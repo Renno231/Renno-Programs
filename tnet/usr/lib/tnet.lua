@@ -6,6 +6,19 @@ local computer = require("computer")
 local component = require("component")
 local pack = table.pack
 
+-- Serializers a peer may ask for. A peer names one of these; it never names a function.
+tnet.serializers = {
+    serialization = {encode = "serialize", decode = "unserialize"},
+    cbor          = {encode = "encode",    decode = "decode"}
+}
+
+-- The network card with this address, or the primary card when none is named.
+local function card(address)
+    local primary = component.modem
+    if not address or (primary and primary.address == address) then return primary end
+    return component.proxy(address)
+end
+
 -- Packet type lookup table for shorter messages
 local pTypeRev, pTypes = {}, {
     ['c'] = "connect",
@@ -15,7 +28,8 @@ local pTypeRev, pTypes = {}, {
     ['m'] = "data"
 }
 
-local nextId = 0
+-- Each boot starts at a random point, so an id seen again from the same peer is the same connection.
+local nextId = math.random(0, 0xffff)
 local function makeId()
     -- 4 chars from this computer
     local base, id = computer.address():sub(-8,-5)
@@ -49,6 +63,8 @@ local function newConnection(fields)
         serial       = nil,
         connected    = fields.connected or false,
         msg_id       = 0,
+        lastIn       = 0,   -- the peer's newest message id; one at or below it is a repeat
+        frags        = {},  -- fragment buffers by message id
         wakeValidator = fields.wakeValidator
     }, Connection)
 end
@@ -70,12 +86,12 @@ local function startTimeoutChecker()
             end
 
             -- Check message-specific timeouts
-            for msg_id, cb in pairs(conn.expectations) do
+            for msg, cb in pairs(conn.expectations) do
                 if cb.timeout and (now - cb.registered > cb.timeout) then
                     if conn.on_error then
-                        pcall(conn.on_error, "Timeout waiting for response: " .. msg_id)
+                        pcall(conn.on_error, "Timeout waiting for response: " .. msg)
                     end
-                    conn.expectations[msg_id] = nil
+                    conn.expectations[msg] = nil
                 end
             end
 
@@ -89,12 +105,12 @@ local function startTimeoutChecker()
                 end
             end
 
-            if conn._fragBuffer and conn._fragBuffer.lastFragTime then
-                if now - conn._fragBuffer.lastFragTime > 10 then
+            for msg_id, frags in pairs(conn.frags) do
+                if now - frags.last > 10 then
                     if conn.on_error then
                         pcall(conn.on_error, "Fragment buffer timeout (incomplete data)")
                     end
-                    conn._fragBuffer = nil
+                    conn.frags[msg_id] = nil
                 end
             end
         end
@@ -117,17 +133,26 @@ local function initRouter()
         local sys_name, conn_id, msg_id, packet_type, frag, maxFrag = table.unpack(ninfo_parts)
         packet_type = pTypes[packet_type] or packet_type
         local args = pack(...)
-        if packet_type == "connect" and listeners[localPort] then
-            local listener = listeners[localPort]
+        local listener = listeners[localPort]
+        if packet_type == "connect" and listener and listener.modem.address == selfAddress then
             if listener.wakeValidator then
                 local valid, result = pcall(listener.wakeValidator, wake)
                 if not valid or not result then
                     return
                 end
             end
-            
+
+            local ack_ninfo = table.concat({sys_name, conn_id, "0", pTypeRev["connected"]}, ",")
+            local old = connections[conn_id]
+            if old and old.address == senderAddress then
+                -- The same connect heard again (a repeat or a resend), even after data: answer it again.
+                pcall(old.modem.send, senderAddress, localPort, wake, ack_ninfo)
+                return
+            end
+            if old then old:close(true) end  -- another peer took this id; the old connection ends
+
             local conn = newConnection({
-                modem   = component.modem,
+                modem   = listener.modem,
                 address = senderAddress,
                 port    = localPort,
                 wake    = wake,
@@ -138,7 +163,6 @@ local function initRouter()
             })
             
             connections[conn_id] = conn
-            local ack_ninfo = table.concat({conn.sys or "server", conn.id, "0", pTypeRev["connected"]}, ",")
             pcall(conn.modem.send, senderAddress, localPort, wake, ack_ninfo)
             if listener.callback then
                 pcall(listener.callback, conn)
@@ -147,7 +171,7 @@ local function initRouter()
         end
         
         local conn = connections[conn_id]
-        if conn and conn.address == senderAddress and conn.sys == sys_name then
+        if conn and conn.address == senderAddress and conn.sys == sys_name and conn.modem.address == selfAddress then
             if conn.wakeValidator then
                 local valid, result = pcall(conn.wakeValidator, wake)
                 if not valid or not result then
@@ -160,27 +184,32 @@ local function initRouter()
             elseif packet_type == "disconnect" then
                 conn:close()
             elseif packet_type == "serialLib" then
-                conn.serial = {
-                    lib = msg,
-                    encode = args[1],
-                    decode = args[2]
-                }
+                local s = tnet.serializers[msg]
+                if s then
+                    conn.serial = {lib = msg, encode = s.encode, decode = s.decode}
+                elseif conn.on_error then
+                    pcall(conn.on_error, "Peer asked for an unknown serializer: " .. tostring(msg))
+                end
             elseif packet_type == "data" then
+                msg_id = tonumber(msg_id)
+                if not msg_id or msg_id <= conn.lastIn then return end  -- a repeat
                 if frag and maxFrag then
                     frag, maxFrag = tonumber(frag), tonumber(maxFrag)
-                    local fBuffer = conn._fragBuffer or {fragCount = 0}
-                    conn._fragBuffer = fBuffer
-                    fBuffer.lastFragTime = computer.uptime()
-                    if not fBuffer[frag] then
-                        fBuffer[frag] = args[1]
-                        fBuffer.fragCount = fBuffer.fragCount + 1
+                    local frags = conn.frags[msg_id] or {count = 0}
+                    conn.frags[msg_id] = frags
+                    frags.last = computer.uptime()
+                    if not frags[frag] then
+                        frags[frag] = args[1]
+                        frags.count = frags.count + 1
                     end
-                    if fBuffer.fragCount == maxFrag then
-                        conn:handleMessage(msg_id, msg, table.concat(fBuffer))
-                        conn._fragBuffer = nil
+                    if frags.count == maxFrag then
+                        conn.frags[msg_id] = nil
+                        conn.lastIn = msg_id
+                        conn:handleMessage(msg, table.concat(frags))
                     end
                 else
-                    conn:handleMessage(msg_id, msg, table.unpack(args,1,args.n))
+                    conn.lastIn = msg_id
+                    conn:handleMessage(msg, table.unpack(args,1,args.n))
                 end
             end
         else
@@ -189,7 +218,7 @@ local function initRouter()
     tnet.routerEventID = event.listen("modem_message", tnet.routerFunction)
 end
 
-function Connection:handleMessage(msg_id, msg, ...)
+function Connection:handleMessage(msg, ...)
     self.last_activity = computer.uptime()
     local args = pack(...)
 
@@ -215,11 +244,10 @@ function Connection:handleMessage(msg_id, msg, ...)
     end
 
     -- Handle expected messages
-    local cb_data = self.expectations[msg_id] or self.expectations[msg]
+    local cb_data = self.expectations[msg]
     if cb_data then
         -- Check timeout
         if cb_data.timeout and (computer.uptime() - cb_data.registered > cb_data.timeout) then
-            self.expectations[msg_id] = nil
             self.expectations[msg] = nil
             return
         end
@@ -232,7 +260,6 @@ function Connection:handleMessage(msg_id, msg, ...)
         
         -- Remove one-time expectations
         if not cb_data.persistent then
-            self.expectations[msg_id] = nil
             self.expectations[msg] = nil
         end
     elseif self.default_callback then
@@ -377,21 +404,20 @@ function Connection:close(quiet)
     end
 end
 
-function Connection:serialLib(lib, encode, decode)
-    self.serial = {
-        lib = lib,
-        encode = encode,
-        decode = decode
-    }
+-- lib names one of tnet.serializers; the peer is told to use it too.
+function Connection:serialLib(lib)
+    local s = assert(tnet.serializers[lib], "unknown serializer: " .. tostring(lib))
+    self.serial = {lib = lib, encode = s.encode, decode = s.decode}
     if self.connected then
         local ninfo = table.concat({self.sys, self.id, "0", pTypeRev["serialLib"]}, ",")
-        pcall(self.modem.send, self.address, self.port, self.wake, ninfo, lib, encode, decode)
+        pcall(self.modem.send, self.address, self.port, self.wake, ninfo, lib)
     end
 end
 
 -- Public API
-function tnet.connect(address, port, wake, sys, conn_id, wakeValidator)
-    local modem = component.modem
+-- modem: the address of the card that reaches the peer; the primary card when omitted.
+function tnet.connect(address, port, wake, sys, conn_id, wakeValidator, modem)
+    modem = card(modem)
     if not modem then
         error("No modem component found")
     end
@@ -415,8 +441,9 @@ function tnet.connect(address, port, wake, sys, conn_id, wakeValidator)
     return conn
 end
 
-function tnet.listen(port, callback, wakeValidator)
-    local modem = component.modem
+-- modem: the address of the only card that hears this port; the primary card when omitted.
+function tnet.listen(port, callback, wakeValidator, modem)
+    modem = card(modem)
     if not modem then
         return false, ("No modem component found")
     end
@@ -429,7 +456,8 @@ function tnet.listen(port, callback, wakeValidator)
 
     listeners[port] = {
         callback = callback,
-        wakeValidator = wakeValidator
+        wakeValidator = wakeValidator,
+        modem = modem
     }
     
     if not tnet.routerEventID then 
