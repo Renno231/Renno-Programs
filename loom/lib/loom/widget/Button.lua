@@ -56,4 +56,6 @@ function Button:draw()
     return true
 end
 
+Button._canFocus = true -- takes keyboard focus
+
 return Button

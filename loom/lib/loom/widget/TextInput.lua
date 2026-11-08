@@ -190,7 +190,9 @@ function TextInput:_key(char, code, ctrl)
     local multi = self:multilines()
     local goal = self._goal
     self._goal = nil
-    if code == 14 then -- Backspace
+    if code == 1 then -- Escape: leave the field
+        self:blur()
+    elseif code == 14 then -- Backspace
         self:_deleteTo(ctrl and self:_wordFrom(-1) or c - 1)
     elseif code == 211 then -- Delete
         self:_deleteTo(ctrl and self:_wordFrom(1) or c + 1)
@@ -217,24 +219,15 @@ function TextInput:_key(char, code, ctrl)
         if multi and not ctrl then self:insert("\n") else self:submit() end
     elseif char >= 32 and char ~= 127 and not ctrl then
         self:insert(unicode.char(char))
+    else
+        return false -- Tab, Up/Down on one line, Ctrl+key...: loom or onKey handles it
     end
+    return true
 end
 
 ---Handle a paste while focused.
 ---@private
 function TextInput:_paste(text) self:insert(text) end
-
----Take the keyboard. `player`, if given, is the only player whose keys count.
----@param player? string
-function TextInput:focus(player) input.focus(self, player) end
-
----Give the keyboard back.
-function TextInput:blur()
-    if input.focused() == self then input.focus(nil) end
-end
-
----@return boolean
-function TextInput:focused() return input.focused() == self end
 
 ---The area inside the border.
 ---@private
@@ -393,5 +386,7 @@ function TextInput:Destroy(force)
     input.forget(self)
     return Widget.Destroy(self, force)
 end
+
+TextInput._canFocus = true -- takes keyboard focus
 
 return TextInput

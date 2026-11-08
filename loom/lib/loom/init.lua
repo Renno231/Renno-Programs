@@ -18,6 +18,10 @@ local loom = {
     invalidate = run.request,
     ---Handle widget errors yourself: `loom.onError(function(widget, message, during) end)`. See loom/run.lua.
     onError = run.onError,
+    ---Handle keys no widget used: `loom.onKey(function(char, code, player) end)`. See loom/input.lua.
+    onKey = require('loom.input').onKey,
+    ---The widget with keyboard focus, or nil.
+    focused = require('loom.input').focused,
 }
 
 -- ImageFile is only needed by programs that load images; load it on first use.

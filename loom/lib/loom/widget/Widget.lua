@@ -17,6 +17,7 @@ local event = require("event")
 local component = require"component"
 local computer = require("computer")
 local run = require("loom.run")
+local input = require("loom.input")
 
 function Widget:defaultCallback()
 end
@@ -407,6 +408,73 @@ end
 ---Ask `loom.run` to redraw soon, after changing widgets outside an event (from a timer, say).
 function Widget:invalidate() run.request(0) end
 
+---Can this widget take keyboard focus? Buttons, switches, sliders, lists, dropdowns and text
+---fields can by default; `focusable(true)` makes any widget focusable. A focused widget gets Enter
+---and Space as a touch, so its touch callback runs.
+---@param value? boolean
+---@return boolean
+function Widget:focusable(value)
+    checkArg(1, value, 'boolean', 'nil')
+    local old = self._focusable
+    if old == nil then old = self._canFocus or false end
+    if value ~= nil then self._focusable = value end
+    return old
+end
+
+---Give this widget keyboard focus. `player`, if given, is the only player whose keys count.
+---@param player? string
+function Widget:focus(player) input.focus(self, player) end
+
+---Take keyboard focus away from this widget.
+function Widget:blur()
+    if input.focused() == self then input.focus(nil) end
+end
+
+---@return boolean
+function Widget:focused() return input.focused() == self end
+
+---Handle a key while focused. Return true if the key was used; otherwise loom handles it
+---(Tab, arrows, Enter/Space as a touch, then `loom.onKey`).
+---@protected
+function Widget:_key(char, code, ctrl, player) return false end
+
+---Draw the focus marker: white brackets just outside the widget, on its parent's background, so
+---the widget keeps its look. `[` `]` beside a one-row widget, `┌│└` `┐│┘` beside a taller one.
+---Frame calls this after drawing its children, so siblings don't cover it.
+---@protected
+function Widget:_drawFocus()
+    local x, y, w, h = self:absX(), self:absY(), self:width(), self:height()
+    local parent = self:getParent()
+    if w < 1 or h < 1 or not parent then return end
+    local px, py, pw, ph = parent:absX(), parent:absY(), parent:width(), parent:height()
+    if parent._drawnBounds then
+        local dx, dy, dw, dh = parent:_drawnBounds()
+        if dx then px, py, pw, ph = dx, dy, dw, dh end
+    end
+    local bg, p = parent:backgroundColor(), parent:getParent()
+    while not bg and p do bg, p = p:backgroundColor(), p:getParent() end
+    local oldBG, oldFG = gpu.getBackground(), gpu.getForeground()
+    gpu.setForeground(0xffffff)
+    if bg then gpu.setBackground(bg) end
+    local function put(cx, cy, char)
+        if cx >= px and cx < px + pw and cy >= py and cy < py + ph then gpu.set(cx, cy, char) end
+    end
+    local left, right = x - 1, x + w
+    for row = y, y + h - 1 do
+        if h == 1 then
+            put(left, row, "[") put(right, row, "]")
+        elseif row == y then
+            put(left, row, "┌") put(right, row, "┐")
+        elseif row == y + h - 1 then
+            put(left, row, "└") put(right, row, "┘")
+        else
+            put(left, row, "│") put(right, row, "│")
+        end
+    end
+    gpu.setBackground(oldBG)
+    gpu.setForeground(oldFG)
+end
+
 ---Place and size this widget relative to its parent on every draw. Fields, in cells or as "N%" of the
 ---parent's inner size: `left`, `right`, `top`, `bottom`, `width`, `height`; and `center` = true, "x"
 ---or "y". `left` and `right` together set the width; one of them pins that edge. `false` removes it.
@@ -730,6 +798,7 @@ end
 
 function Widget:Destroy(force) --unparent and then .. ? 
     if force == nil then force = true end
+    input.forget(self)
     self:closeListeners()
     self:enabled(false)
     -- if self.clearChildren then --should frames destroy any child objects when being destroyed?

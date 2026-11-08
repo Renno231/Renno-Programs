@@ -4,6 +4,7 @@ local Widget = require("loom.widget.Widget")
 local event = require("event")
 local computer = require("computer")
 local run = require("loom.run")
+local input = require("loom.input")
 
 --=============================================================================
 --test bitblt bug
@@ -315,6 +316,7 @@ function Frame:draw()
             element:_animate()
         end
     end
+    local focusedChild
     for _, element in pairs(self._childs) do --could (technically *should*) have error handling here
         if element._layout then element:_applyLayout(width, height, inset) end
         element[animateOrWeld](element)
@@ -329,7 +331,12 @@ function Frame:draw()
         if noDrawError and drawReturn==true and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end
+        if noDrawError and element:focusable() and element:visible() and element:width() > 0 and element:height() > 0 then
+            input.shown(element)
+            if input.focused() == element then focusedChild = element end
+        end
     end
+    if focusedChild then focusedChild:_drawFocus() end -- after the children, so none covers it
     
     if self.drawBorder and not self._borderoverride then self:drawBorder() end
     --might need to call self:drawBorder() like for the elements ^

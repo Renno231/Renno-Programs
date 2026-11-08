@@ -117,6 +117,24 @@ function SliderBar:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     end
 end
 
+---How far Left/Right move the value when focused. Defaults to one cell's worth of the range.
+---@param value? number
+---@return number
+function SliderBar:step(value)
+    checkArg(1, value, 'number', 'nil')
+    local old = self._step or math.max(1, (self:max() - self:min()) / math.max(1, self:width() - 1))
+    if value ~= nil then self._step = value end
+    return old
+end
+
+function SliderBar:_key(char, code)
+    if code == 203 or code == 205 then -- Left, Right
+        self:adjust(code == 203 and -self:step() or self:step())
+        return true
+    end
+    return code == 28 or code == 156 or code == 57 -- Enter/Space would be a touch at the left end
+end
+
 function SliderBar:draw()
     if (not self:visible()) then return end
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
@@ -140,5 +158,7 @@ function SliderBar:draw()
     gpu.setForeground(oldFG)
     return true
 end
+
+SliderBar._canFocus = true -- takes keyboard focus
 
 return SliderBar

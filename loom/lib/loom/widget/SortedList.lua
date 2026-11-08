@@ -3,6 +3,8 @@ local gpu = require("loom.gpu")
 local Widget = require("loom").widget.Widget
 local unicode = require("unicode")
 local keyboard = require('keyboard')
+local input = require("loom.input")
+local run = require("loom.run")
 
 ---@class SortedList:Widget
 ---@field private _size Size
@@ -277,6 +279,78 @@ function SortedList:defaultCallback(_, eventName, uuid, x, y, button, playerName
     end
 end
 
+-- Keyboard: a cursor row, shown while focused. Up/Down move it (scrolling as needed) and leave the
+-- list at its top and bottom; Enter/Space touch the row, or deselect it if it is the only selection.
+
+local function rows(self) return self:height() - (self:bordered() and 2 or 0) end
+
+---Put the cursor on a visible row and return that row, or nil if the list has to scroll first.
+---@private
+function SortedList:_placeCursor(height)
+    local shown = self._shown
+    local visible = math.min(#shown, height)
+    if visible == 0 then return end
+    local cursor = self._cursor
+    for line = 1, visible do if shown[line] == cursor then return line end end
+    if type(cursor) == "number" and type(shown[1]) == "number" and not self:filterBy() then -- out of view
+        local old = self:scroll()
+        if cursor < shown[1] then self:scroll(cursor, true) else self:scroll(cursor - height + 1, true) end
+        if self:scroll() ~= old then run.request(0) return end
+    end
+    local selected = self:getSelection()[1]
+    for line = 1, visible do
+        if shown[line] == selected then self._cursor = selected return line end
+    end
+    self._cursor = shown[1]
+    return 1
+end
+
+-- Scroll an unfiltered list so the cursor row is in view.
+local function reveal(self, height)
+    local cursor = self._cursor
+    if type(cursor) ~= "number" or self:filterBy() then return end
+    local first = math.max(1, self:scroll())
+    if cursor < first then self:scroll(cursor, true)
+    elseif cursor > first + height - 1 then self:scroll(cursor - height + 1, true) end
+end
+
+function SortedList:_key(char, code, ctrl, player)
+    local shown, height = self._shown, rows(self)
+    local visible = math.min(#shown, height)
+    local line
+    for i = 1, visible do if shown[i] == self._cursor then line = i end end
+    if code == 200 or code == 208 then -- Up, Down
+        if not line then return false end
+        if code == 208 then
+            if shown[line + 1] then self._cursor = shown[line + 1] reveal(self, height) return true end
+            return false
+        end
+        if line > 1 then self._cursor = shown[line - 1] return true end
+        local previous = type(self._cursor) == "number" and not self:filterBy() and self._cursor - 1
+        if previous and previous >= 1 and self._list[previous] ~= nil then self._cursor = previous reveal(self, height) return true end
+        return false
+    elseif code == 28 or code == 156 or code == 57 then -- Enter, Space
+        local index = self._cursor
+        if not line or type(index) ~= "number" then return true end
+        local selection = self:getSelection()
+        if #selection == 1 and selection[1] == index then
+            self:select(index, false)
+            self:invokeCallback("selectionChanged", self:getSelection())
+        else
+            local b = self:bordered() and 1 or 0
+            self:invokeCallback("touch", gpu.getScreen(), self:absX() + b, self:absY() + b + line - 1, 0, player)
+        end
+        return true
+    end
+    return false
+end
+
+
+local function lighter(color)
+    local function ch(s) local c = (color >> s) & 0xff return (c + (0xff - c) // 4) << s end
+    return ch(16) | ch(8) | ch(0)
+end
+
 ---Draw the SortedList on screen
 function SortedList:draw() --could make it check to see if its hitting the border of its parent and resize vertically
     if (not self:visible()) then return end
@@ -333,9 +407,26 @@ function SortedList:draw() --could make it check to see if its hitting the borde
     local linePrefix = "%+"..tostring(tostring(#self._shown):len()).."s:%+"..tostring(tostring(#self._list):len()).."s "
     if filterValue then self._contextEnd = #self._shown end --for scrolling end detection
     
+    local cursorLine = input.focused() == self and self:_placeCursor(height)
     for line, index in ipairs (self._shown) do
         if line > height then break end
-        if type(index) == 'number' then
+        if line == cursorLine and type(index) == 'number' then
+            local rowBG = self._selection[index] and newFG or lighter(newBG or 0)
+            local text = self._list[index]
+            if formatFunc then
+                local succ, returned = pcall(formatFunc, text)
+                text = (not succ and '(format)' or '') .. returned
+            end
+            text = (isNumbered and string.format(linePrefix, line, index) or "") .. tostring(text):gsub("\n","; ")
+            gpu.setBackground(rowBG)
+            self:_gpufill(x, y + line - 1, width, 1, " ")
+            if self._selection[index] and newBG then gpu.setForeground(newBG) end
+            self:_gpuset(x + 1, y + line - 1, unicode.sub(text, 1, width - 2))
+            gpu.setForeground(0xffffff)
+            self:_gpuset(x, y + line - 1, "▌")
+            if newBG then gpu.setBackground(newBG) end
+            if newFG then gpu.setForeground(newFG) end
+        elseif type(index) == 'number' then
             local listValue = self._list[index]
             if formatFunc then 
                 local succ, returned = pcall(formatFunc, listValue)
@@ -365,5 +456,7 @@ function SortedList:Destroy()
     self._selection = nil
     Widget.Destroy(self)
 end
+
+SortedList._canFocus = true -- takes keyboard focus
 
 return SortedList

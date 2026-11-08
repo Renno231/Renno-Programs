@@ -67,15 +67,21 @@ function run.stop() running = false end
 ---@param interval? number
 function run.run(root, interval)
     interval = interval or 0.5
+    local input = require("loom.input")
+    input.attach() -- keys are listened for the whole time, for keyboard navigation
     running = true
-    while running do
-        nextFrame = math.huge
-        root:draw()
-        local now = computer.uptime()
-        -- uptime moves in ticks (0.05 s) and a deadline exactly on a tick can land just after it
-        -- in floating point, costing a whole extra tick; wake on the tick nearest the deadline
-        event.pull(math.max(0, math.min(nextFrame, now + interval) - now - 0.025))
-    end
+    local ok, err = pcall(function()
+        while running do
+            nextFrame = math.huge
+            root:draw()
+            local now = computer.uptime()
+            -- uptime moves in ticks (0.05 s) and a deadline exactly on a tick can land just after it
+            -- in floating point, costing a whole extra tick; wake on the tick nearest the deadline
+            event.pull(math.max(0, math.min(nextFrame, now + interval) - now - 0.025))
+        end
+    end)
+    input.detach()
+    if not ok then error(err, 0) end
 end
 
 return run

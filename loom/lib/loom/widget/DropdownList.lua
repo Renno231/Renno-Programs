@@ -60,6 +60,7 @@ function DropdownList:list(newlist) -- e.g., dropdown:list():sorter(function(...
                         self:clearSelection()
                         self:select(index, button == 0)
                         dropdown:toggle()
+                        if self:focused() then dropdown:focus(playerName) end -- the list is closing
                     end
                     return true
                 elseif eventName == "scroll" then
@@ -119,6 +120,7 @@ function DropdownList:defaultCallback(_, eventName, uuid, x, y, button, playerNa
             self:list():clearSelection()
         else
             self:toggle()
+            if self:drop() and self:focused() then self._list:focus(playerName) end -- opened from the keyboard
         end
         return true
         --maybe add one for scroll that scrolls the list selection up/down by 1
@@ -176,5 +178,7 @@ function DropdownList:Destroy(force)
     end
     Widget.Destroy(self, force)
 end
+
+DropdownList._canFocus = true -- takes keyboard focus
 
 return DropdownList

@@ -365,6 +365,120 @@ do
     root:Destroy()
 end
 
+-- Keyboard navigation: arrows, Enter/Space as touch, outline, per-widget keys, onKey ----------
+do
+    input.attach()
+    local root = scene()
+    local touches = {}
+    local function counted(name)
+        return function(self, _, eventName) if eventName == "touch" then touches[name] = (touches[name] or 0) + 1 end end
+    end
+    local b1 = gui.Button(root, 2, 2, 8, 3, 0x333366) b1:callback(counted("b1"))
+    local b2 = gui.Button(root, 30, 2, 8, 3, 0x333366) b2:callback(counted("b2"))
+    local field = gui.TextInput(root, 2, 10, "")
+    field:size(10, 1)
+    local switch = gui.ToggleSwitch(root, 30, 10, 6, 1)
+    local slider = gui.SliderBar(root, 2, 14, 11, 1, 0, 10, 0x222222, 0xffffff)
+    local list = gui.SortedList(root, 30, 14, 10, 3, 0x202040)
+    list:foregroundColor(0xffffff)
+    list:list({"a", "b", "c", "d", "e"})
+    local plain = gui.Rectangle(root, 50, 2, 4, 2, 0x444444)
+    root:draw()
+    local function press(char, code) key(char, code) root:draw() end
+    local RIGHT, LEFT, UP, DOWN, ENTER, SPACE = 205, 203, 200, 208, 28, 57
+
+    local function cell(x, y) local c, f, b = proxy.get(x, y) return ("%s,%x,%x"):format(c, f, b) end
+    local inside = cell(2, 2)
+    local _, _, rootBG = proxy.get(1, 2)
+    b1:focus()
+    root:draw()
+    local corner, cornerFG, cornerBG = proxy.get(1, 2)
+    local marks = corner .. proxy.get(1, 3) .. proxy.get(1, 4) .. proxy.get(10, 2) .. proxy.get(10, 3) .. proxy.get(10, 4)
+    check("tall widgets get corner brackets", marks == "┌│└┐│┘" and cornerFG == 0xffffff and cornerBG == rootBG, marks)
+    eq("the widget keeps its look", cell(2, 2), inside)
+    field:focus() root:draw()
+    eq("one-row widgets get [ ]", proxy.get(1, 10) .. proxy.get(12, 10), "[]")
+    b1:focus() root:draw()
+    root:draw()
+    check("focus survives a redraw", b1:focused())
+    check("plain widgets are not focusable", not plain:focusable() and b1:focusable())
+
+    press(0, RIGHT) check("right goes to the button beside", b2:focused())
+    press(0, DOWN) check("down goes to the switch below", switch:focused())
+    press(0, LEFT) check("left goes to the field", field:focused())
+    press(0, UP) check("up goes back to the first button", b1:focused())
+
+    press(13, ENTER) press(32, SPACE)
+    eq("enter and space touch the button", touches.b1, 2)
+    switch:focus() root:draw()
+    local before = switch:value()
+    press(13, ENTER)
+    check("enter flips the switch", switch:value() ~= before)
+
+    slider:focus() root:draw()
+    press(0, RIGHT) press(0, RIGHT) press(0, RIGHT) press(0, LEFT)
+    eq("left/right nudge the slider", slider:value(), 2)
+    press(13, ENTER)
+    eq("enter leaves the slider value", slider:value(), 2)
+
+    list:focus() root:draw()
+    press(0, DOWN)
+    press(13, ENTER)
+    eq("enter selects the cursor row", table.concat(list:getSelection(), ","), "2")
+    press(13, ENTER)
+    eq("enter again deselects it", #list:getSelection(), 0)
+    press(0, DOWN) press(0, DOWN) press(0, DOWN) root:draw()
+    press(13, ENTER)
+    eq("the cursor scrolls the list", table.concat(list:getSelection(), ","), "5")
+    check("the cursor row is drawn", ({proxy.get(30, 16)})[1] == "▌", ({proxy.get(30, 16)})[1])
+    press(0, DOWN)
+    check("down at the bottom stays when nothing is below", list:focused())
+    for _ = 1, 5 do press(0, UP) end -- rows 4, 3, 2, 1, then out
+    check("up at the top leaves the list", switch:focused())
+
+    local keys = {}
+    loom.onKey(function(char, code) keys[#keys + 1] = code end)
+    b1:focus() root:draw()
+    press(49, 2) press(0, 1) -- "1", Escape
+    eq("unused keys reach onKey", table.concat(keys, ","), "2,1")
+    field:focus() root:draw()
+    press(49, 2)
+    eq("a focused field still takes digits", field:text(), "1")
+    eq("onKey does not see them", #keys, 2)
+    loom.onKey(nil)
+
+    touch(31, 3)
+    check("a touch focuses the widget", b2:focused())
+    touch(60, 30)
+    check("a touch elsewhere clears focus", input.focused() == nil)
+    press(0, DOWN)
+    check("an arrow with nothing focused focuses the first widget", b1:focused())
+
+    local dropdown = gui.DropdownList(root, 50, 20, 10, 1, 0x333333)
+    dropdown:list():list({"x", "y", "z"})
+    root:draw()
+    dropdown:focus() root:draw()
+    press(13, ENTER)
+    check("enter opens a dropdown and focuses its list", dropdown:drop() and dropdown:list():focused())
+    press(0, DOWN) press(13, ENTER)
+    check("enter picks a row and closes it", not dropdown:drop() and dropdown:focused() and dropdown:list():getSelection()[1] == 2,
+        tostring(dropdown:list():getSelection()[1]))
+
+    local dialog = gui.Frame(root, 60, 1) dialog:size(15, 6)
+    local behind = gui.Button(dialog, 2, 2, 6, 1, 0x333366)
+    root:draw()
+    behind:focus() root:draw()
+    dialog:enabled(false)
+    press(0, DOWN)
+    check("a disabled frame takes its widgets out of focus", not behind:focused())
+    press(9, 15)
+    check("tab skips widgets in a disabled frame", not behind:focused())
+
+    root:Destroy()
+    check("destroying the focused widget clears focus", input.focused() == nil)
+    input.detach()
+end
+
 -- Shader: half-block pixels, merged runs, unpainted pixels ---------------------------------------
 do
     local root = scene()

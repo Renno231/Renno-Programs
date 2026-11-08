@@ -39,4 +39,6 @@ end
 
 -- end
 
+TextButton._canFocus = true -- takes keyboard focus
+
 return TextButton

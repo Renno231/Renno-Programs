@@ -126,4 +126,6 @@ function ToggleSwitch:draw()
     return true
 end
 
+ToggleSwitch._canFocus = true -- takes keyboard focus
+
 return ToggleSwitch
