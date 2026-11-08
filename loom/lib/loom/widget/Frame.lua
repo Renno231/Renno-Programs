@@ -209,7 +209,7 @@ function Frame:_initBuffer()
     end
     if not buffer then
         buffer = gpu.allocateBuffer(rwidth, rheight)
-        self._buffer = buffer
+        self._buffer, self._bufferArea = buffer, rwidth * rheight
         self._lastDrawLog = nil -- a new buffer is drawn whole
     end
     local screenBuffer = gpu.getActiveBuffer()
@@ -224,6 +224,28 @@ function Frame:_initBuffer()
     return screenBuffer, buffer
 end
 
+---Copy w x h at x, y of `buffer` to the same place on `screenBuffer`.
+---OpenComputers charges a copy to the screen by the size of the buffer it comes from, and a
+---screen-sized one costs more than a tier-3 computer's call budget for a tick, so every such copy
+---waits a tick. Copies between buffers are free, so a small part goes through a buffer its own size.
+---@private
+function Frame:_blit(screenBuffer, buffer, x, y, w, h)
+    local from, fx, fy = buffer, x, y
+    if w * h * 2 <= self._bufferArea then -- costs at most two thirds of a tier-3 tick's budget
+        local stage = self._stage
+        if stage and (self._stageW ~= w or self._stageH ~= h) then gpu.freeBuffer(stage) stage = nil end
+        if not stage then
+            stage = gpu.allocateBuffer(w, h)
+            self._stage, self._stageW, self._stageH = stage, w, h
+        end
+        if stage then
+            gpu.bitblt(stage, 1, 1, w, h, buffer, bitBltFix and y or x, bitBltFix and x or y)
+            from, fx, fy = stage, 1, 1
+        end
+    end
+    gpu.bitblt(screenBuffer, x, y, w, h, from, bitBltFix and fy or fx, bitBltFix and fx or fy)
+end
+
 ---Finish drawing a root frame: copy what changed in its buffer to the screen.
 ---@param screenBuffer? number
 ---@param buffer? number
@@ -235,9 +257,7 @@ function Frame:_restoreBuffer(screenBuffer, buffer)
             local x, y = self:absX(), self:absY()
             local r, b = x + self:width() - 1, y + self:height() - 1
             if x1 then x, y, r, b = math.max(x, x1), math.max(y, y1), math.min(r, x2), math.min(b, y2) end
-            if x <= r and y <= b then
-                gpu.bitblt(screenBuffer, x, y, r - x + 1, b - y + 1, buffer, bitBltFix and y or x, bitBltFix and x or y)
-            end
+            if x <= r and y <= b then self:_blit(screenBuffer, buffer, x, y, r - x + 1, b - y + 1) end
         end
         gpu.setActiveBuffer(screenBuffer)
     end
@@ -319,6 +339,7 @@ end
 
 function Frame:Destroy(force)
     if self._buffer then gpu.freeBuffer(self._buffer) end
+    if self._stage then gpu.freeBuffer(self._stage) end
     return Widget.Destroy(self, force)
 end
 

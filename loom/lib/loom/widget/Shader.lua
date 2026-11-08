@@ -130,7 +130,27 @@ function Shader:_build(t)
             col = col + length
         end
     end
-    return ops
+    -- Runs never overlap, so draw them grouped by colour (background first): each colour is then
+    -- set once per frame instead of once per run.
+    local groups, keys = {}, {}
+    for i = 1, n, 5 do
+        local key = ops[i + 1] << 24 | ops[i]
+        local group = groups[key]
+        if not group then group = {} groups[key] = group keys[#keys + 1] = key end
+        group[#group + 1] = i
+    end
+    if #keys * 5 == n then return ops end -- every run has its own colours
+    table.sort(keys)
+    local sorted, m = {}, 0
+    for k = 1, #keys do
+        local group = groups[keys[k]]
+        for g = 1, #group do
+            local i = group[g]
+            sorted[m + 1], sorted[m + 2], sorted[m + 3], sorted[m + 4], sorted[m + 5] = ops[i], ops[i + 1], ops[i + 2], ops[i + 3], ops[i + 4]
+            m = m + 5
+        end
+    end
+    return sorted
 end
 
 function Shader:draw()

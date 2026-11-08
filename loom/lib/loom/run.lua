@@ -72,7 +72,9 @@ function run.run(root, interval)
         nextFrame = math.huge
         root:draw()
         local now = computer.uptime()
-        event.pull(math.max(0, math.min(nextFrame, now + interval) - now))
+        -- uptime moves in ticks (0.05 s) and a deadline exactly on a tick can land just after it
+        -- in floating point, costing a whole extra tick; wake on the tick nearest the deadline
+        event.pull(math.max(0, math.min(nextFrame, now + interval) - now - 0.025))
     end
 end
 

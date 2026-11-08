@@ -365,6 +365,30 @@ do
     root:Destroy()
 end
 
+-- Shader: half-block pixels, merged runs, unpainted pixels ---------------------------------------
+do
+    local root = scene()
+    local RED, BLUE, GREEN = 0xff0000, 0x0000ff, 0x00ff00
+    local checker = gui.Shader(root, 2, 2, 4, 2, function(x, y) return (x + y) % 2 == 0 and RED or BLUE end)
+    local solid = gui.Shader(root, 2, 5, 10, 2, function(x) if x <= 6 then return GREEN end end)
+    root:draw()
+    local ok = true
+    for row = 0, 1 do
+        for col = 0, 3 do
+            local ch, fg, bg = proxy.get(2 + col, 2 + row)
+            local top = col % 2 == 0 and RED or BLUE -- shader x = col + 1, y = 2 * row + 1
+            if ch ~= "▀" or fg ~= top or bg ~= (top == RED and BLUE or RED) then ok = false end
+        end
+    end
+    check("shader draws two pixels per cell", ok)
+    local _, fills = solid:stats()
+    eq("equal cells merge into one fill per row", fills, 2)
+    local _, _, painted = proxy.get(7, 5)
+    local _, _, unpainted = proxy.get(8, 5)
+    check("nil leaves pixels unpainted", painted == GREEN and unpainted == 0, ("%06x %06x"):format(painted, unpainted))
+    root:Destroy()
+end
+
 -- Draw budget: a busy screen that does not change costs few GPU calls and no screen copy ------------
 do
     local root = scene()
