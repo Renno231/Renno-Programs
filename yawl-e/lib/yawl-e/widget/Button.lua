@@ -1,10 +1,11 @@
+local checkArg = require("yawl-e.util").checkArg
 local Rectangle = require("yawl-e.widget.Rectangle")
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 local computer = require("computer")
 
 ---@class Button
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,backgroundColor:number)
-local Button = require('libClass2')(Rectangle)
+local Button = require("yawl-e.class")(Rectangle)
 
 function Button:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     if eventName ~= "touch" then return end

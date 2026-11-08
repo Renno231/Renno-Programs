@@ -1,10 +1,11 @@
-local gpu = require("component").gpu
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
 local Widget = require("yawl-e.widget.Widget")
 local unicode = require("unicode")
 local keyboard = require('keyboard')
 local wrap = require("yawl-e.util").wrap
 
-local OutputQueue = require("libClass2")(Widget)
+local OutputQueue = require("yawl-e.class")(Widget)
 
 function OutputQueue:new(parent, x, y, width, height, backgroundColor)
     checkArg(1, parent, 'table')
@@ -14,7 +15,7 @@ function OutputQueue:new(parent, x, y, width, height, backgroundColor)
     checkArg(5, height, 'number')
     checkArg(6, backgroundColor, 'number')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o._list = {}
     o._shown = {} --used for selection
     o._selection = {} --for multi selection, selection[index] = index in _list

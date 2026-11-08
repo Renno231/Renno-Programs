@@ -54,6 +54,16 @@ This method handles the following keys:
 - Backspace & Delete: Removes a character from the text.
 - Arrow keys: Moves the cursor in the text.
 
+### mask
+
+Shows every character as `char`, for password entry. `text()` still returns the typed text. Pass `false` to show the text again. Returns the previous mask, or `false`.
+
+```lua
+local password = gui.TextInput(root, 10, 5, "", 0xffffff)
+password:size(20, 1)
+password:mask("*")
+```
+
 ## TODO
 
 The following features are planned to be added in the future:

@@ -1,9 +1,10 @@
-local gpu = require("component").gpu
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
 local Widget = require("yawl-e.widget.Widget")
 -- need to make it possible to support vertical
 ---@class SliderBar:Widget
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,min:number|nil,max:number|nil,backgroundColor:number|nil,foregroundColor:number|nil):SliderBar
-local SliderBar = require("libClass2")(Widget)
+local SliderBar = require("yawl-e.class")(Widget)
 
 ---@param parent Frame
 ---@param x number
@@ -26,7 +27,7 @@ function SliderBar:new(parent, x, y, width, height, min, max, backgroundColor, f
     checkArg(6, backgroundColor, 'number', 'nil')
     checkArg(6, foregroundColor, 'number', 'nil')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o._size = {width = 1, height = 1}
     ---@cast o SliderBar
     o:size(width, height)

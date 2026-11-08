@@ -1,7 +1,8 @@
-local class = require("libClass2")
+local checkArg = require("yawl-e.util").checkArg
+local class = require("yawl-e.class")
 local Frame = require("yawl-e.widget.Frame")
 local unicode = require("unicode")
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 
 ---@class Border:Frame
 ---@field parent Frame
@@ -20,7 +21,7 @@ function Border:new(parent, x, y, borderset)
     checkArg(1, parent, "table")
     checkArg(1, borderset, "string", 'nil')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o:borderSet(borderset)
     o:bordered(true)
     o._borderoverride = true

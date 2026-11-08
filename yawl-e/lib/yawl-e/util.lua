@@ -3,6 +3,16 @@ local unicode = require("unicode")
 unicode.charAt = function(str, index) return unicode.sub(str, index, index) end
 local utils = {}
 
+---checkArg without allocation (OpenComputers' checkArg makes a closure on every call, and widget
+---getters run it many times per draw). Takes up to five type names.
+function utils.checkArg(n, have, t1, t2, t3, t4, t5)
+    local t = type(have)
+    if t == t1 or t == t2 or t == t3 or t == t4 or t == t5 then return end
+    local want = t1
+    for _, name in ipairs({t2, t3, t4, t5}) do want = want .. " or " .. name end
+    error(string.format("bad argument #%d (%s expected, got %s)", n, want, t), 3)
+end
+
 ---Take a color int (hex) and return it's red green and blue components
 ---@param hex number
 ---@return number
@@ -107,6 +117,8 @@ function utils.formatNumberShort(number, units)
 
     return formattedNumber .. units[currentUnit]
 end
+
+local checkArg = utils.checkArg
 
 local Tab = {} --designed to be used in Window widget as helper class
 Tab.__index = Tab

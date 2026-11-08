@@ -1,13 +1,14 @@
+local checkArg = require("yawl-e.util").checkArg
 --[[
     a much much simpler and cheaper and lighter Text object without any line wrapping
     true to its name, it's purely for being able to show a simple 1 line text
     height is never above 1 line
 ]]
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 local unicode = require("unicode")
 
 local Widget = require("yawl-e.widget.Widget")
-local TextLabel = require('libClass2')(Widget)
+local TextLabel = require("yawl-e.class")(Widget)
 
 ---@param parent Frame
 ---@param x number
@@ -23,7 +24,7 @@ function TextLabel:new(parent, x, y, text, foregroundColor)
     checkArg(5, foregroundColor, 'number', 'nil')
     if (type(x) == "table") then checkArg(3, y, 'nil') else checkArg(3, y, 'number') end
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o Text
     o:text(text or "")
     o:foregroundColor(foregroundColor or 0xffffff)

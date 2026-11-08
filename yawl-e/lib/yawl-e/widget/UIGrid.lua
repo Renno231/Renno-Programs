@@ -1,3 +1,4 @@
+local checkArg = require("yawl-e.util").checkArg
 --[[
     UIGrid as a frame, on parent element size and position get stored, and un unparent get restored (overloaded parent function), 
     but during draw they forced into a grid of x columns and y rows. 
@@ -5,9 +6,9 @@
     ColumnWidth, RowHeight. Or cellWidth and cellHeight and cellSize? If unset or set to false, autofit to cols and rows
 ]]
 
-local class = require("libClass2")
+local class = require("yawl-e.class")
 local Frame = require("yawl-e.widget.Frame")
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 
 --[[
     TODO

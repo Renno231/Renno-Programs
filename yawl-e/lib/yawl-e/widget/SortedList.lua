@@ -1,4 +1,5 @@
-local gpu = require("component").gpu
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
 local Widget = require("yawl-e").widget.Widget
 local unicode = require("unicode")
 local keyboard = require('keyboard')
@@ -7,7 +8,7 @@ local keyboard = require('keyboard')
 ---@field private _size Size
 ---@operator call:SortedList
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,backgroundColor:number)
-local SortedList = require("libClass2")(Widget)
+local SortedList = require("yawl-e.class")(Widget)
 ---Create a new SortedList
 ---@param parent Frame
 ---@param x number
@@ -24,7 +25,7 @@ function SortedList:new(parent, x, y, width, height, backgroundColor)
     checkArg(5, height, 'number')
     checkArg(6, backgroundColor, 'number', 'nil')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o._list = {}
     o._shown = {} --used for selection
     o._selection = {} --for multi selection, selection[index] = index in _list

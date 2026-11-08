@@ -1,11 +1,12 @@
-local gpu = require("component").gpu
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
 local Widget = require("yawl-e.widget.Widget")
 
 ---@class Rectangle:Widget
 ---@field private _size Size
 ---@operator call:Rectangle
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,backgroundColor:number)
-local Rectangle = require("libClass2")(Widget)
+local Rectangle = require("yawl-e.class")(Widget)
 
 ---Create a new rectangle
 ---@param parent Frame
@@ -23,7 +24,7 @@ function Rectangle:new(parent, x, y, width, height, backgroundColor)
     checkArg(5, height, 'number')
     checkArg(6, backgroundColor, 'number')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o Rectangle
     o:size(width, height)
     o:backgroundColor(backgroundColor or 0)

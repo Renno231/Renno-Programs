@@ -1,6 +1,7 @@
-local class = require("libClass2")
+local checkArg = require("yawl-e.util").checkArg
+local class = require("yawl-e.class")
 local Widget = require("yawl-e.widget.Widget")
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 local unicode = require"unicode"
 --[[
     Ideally, Histogram will have horizontal scrolling. Though there is some contention about the direction.
@@ -25,7 +26,7 @@ function Histogram:new(parent, x, y, maxColumns)
     checkArg(1, parent, "table")
     checkArg(1, maxColumns, "number", "nil")
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o Histogram
     o._maxColumns = maxColumns
     o._data = {}

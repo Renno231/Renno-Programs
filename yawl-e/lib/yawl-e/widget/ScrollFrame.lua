@@ -1,4 +1,5 @@
-local class = require("libClass2")
+local checkArg = require("yawl-e.util").checkArg
+local class = require("yawl-e.class")
 local Frame = require("yawl-e.widget.Frame")
 local keyboard = require('keyboard')
 
@@ -12,7 +13,7 @@ function ScrollFrame:new(parent, x, y)
     y = y or 1
     
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o:propagateFirst(true)
     return o
 end

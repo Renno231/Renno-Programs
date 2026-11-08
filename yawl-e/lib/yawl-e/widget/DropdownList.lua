@@ -1,6 +1,7 @@
-local class = require('libClass2')
+local checkArg = require("yawl-e.util").checkArg
+local class = require("yawl-e.class")
 local unicode = require("unicode")
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 
 local Widget = require("yawl-e.widget.Widget")
 local SortedList = require("yawl-e").widget.SortedList
@@ -15,7 +16,7 @@ function DropdownList:new(parent, x, y, width, height, backgroundColor, listobj)
     checkArg(6, backgroundColor, 'number')
     checkArg(7, listobj, 'table','nil')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o._dropped = false
     ---@cast o DropdownList
     listobj = listobj or SortedList(parent, x, y+height, width, 5, backgroundColor)

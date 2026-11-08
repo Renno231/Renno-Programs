@@ -1,4 +1,5 @@
-local class = require("libClass2")
+local checkArg = require("yawl-e.util").checkArg
+local class = require("yawl-e.class")
 local fs = require("filesystem")
 local os = require("os")
 
@@ -149,8 +150,7 @@ local ImageFile = class()
 ---@return ImageFile
 function ImageFile:new(path)
     checkArg(1, path, 'string')
-    local o = self.parent()
-    setmetatable(o, {__index = self})
+    local o = setmetatable({}, self)
     ---@cast o ImageFile
     o._property = {}
     o._pixel = {}

@@ -1,4 +1,5 @@
-local gpu = require("component").gpu
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
 local Widget = require("yawl-e.widget.Widget")
 local event = require("event")
 local computer = require("computer")
@@ -34,7 +35,7 @@ gpu.freeBuffer(testBuffer2)
 ---@overload fun():Frame
 ---@overload fun(parent:Frame):Frame
 ---@overload fun(parent:Frame,x:number,y:number):Frame
-local Frame = require("libClass2")(Widget)
+local Frame = require("yawl-e.class")(Widget)
 
 ---@param parentFrame Frame
 ---@param x number
@@ -53,7 +54,7 @@ function Frame:new(parentFrame, x, y)
         y = 1
     end
     local o = self.parent(parentFrame, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o Frame
     o._childs = {}
     local w, h = gpu.getViewport()
@@ -62,11 +63,14 @@ function Frame:new(parentFrame, x, y)
     o._weldCount = 0
     o._propagateFirst = false
     if (not parentFrame) then
-        o._listeners.touch =  event.listen("touch",  function(...) o:_touchHandler(...)  end)
-        o._listeners.drag =   event.listen("drag",   function(...) o:propagateEvent(...) end)
-        o._listeners.drop =   event.listen("drop",   function(...) o:propagateEvent(...) end)
-        o._listeners.scroll = event.listen("scroll", function(...) o:propagateEvent(...) end)
-        o._listeners.walk =   event.listen("walk",   function(...) o:propagateEvent(...) end)
+        local function propagate(...) o:propagateEvent(...) end
+        o._listeners = {
+            touch  = event.listen("touch", function(...) o:_touchHandler(...) end),
+            drag   = event.listen("drag", propagate),
+            drop   = event.listen("drop", propagate),
+            scroll = event.listen("scroll", propagate),
+            walk   = event.listen("walk", propagate),
+        }
     end
     return o
 end
@@ -117,7 +121,7 @@ end
 
 function Frame:propagateEvent(eName, screenAddress, x, y, ...)
     if (not self:enabled()) then return end
-    table.sort(self._childs, function(a, b) return a:z() < b:z() end)
+    self:_sort()
     
     for i = #(self._childs), 1, -1 do
         local w = self._childs[i]
@@ -187,37 +191,54 @@ function Frame:_drawnBounds(x,y,width,height)
     end
 end
 
----initialize a frame buffer
+---Start drawing a root frame: draw into the root's own screen-sized buffer, kept between draws,
+---and record the drawing calls. Frames inside a root draw straight into the root's buffer.
 ---@protected
----@return number defaultBuffer,number newBuffer
+---@return number? screenBuffer,number? buffer
 function Frame:_initBuffer()
-    local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    if self:getParent() then return end
     local rwidth, rheight = gpu.getResolution()
-    local defaultBuffer = gpu.getActiveBuffer()
-    local newBuffer, reason = gpu.allocateBuffer(rwidth, rheight)
-
-    if newBuffer then
-        defaultBuffer = gpu.setActiveBuffer(newBuffer) --means default buffer will always be the last one
+    local buffer = self._buffer
+    if buffer then
+        local bwidth, bheight = gpu.getBufferSize(buffer)
+        if bwidth ~= rwidth or bheight ~= rheight then
+            if bwidth then gpu.freeBuffer(buffer) end
+            buffer = nil
+        end
     end
-
-    if (newBuffer and newBuffer ~= defaultBuffer) then
-        --copy the old buffer in the new buffer for transparancy effect
-        gpu.bitblt(newBuffer, x, y, width, height, defaultBuffer, bitBltFix and y or x, bitBltFix and x or y)
+    if not buffer then
+        buffer = gpu.allocateBuffer(rwidth, rheight)
+        self._buffer = buffer
+        self._lastDrawCount = nil -- a new buffer always goes to the screen
     end
-    return defaultBuffer, newBuffer
+    local screenBuffer = gpu.getActiveBuffer()
+    if buffer then
+        gpu.setActiveBuffer(buffer)
+        if not self:backgroundColor() then --start from what is on screen, for transparency
+            local x, y = self:absX(), self:absY()
+            gpu.bitblt(buffer, x, y, self:width(), self:height(), screenBuffer, bitBltFix and y or x, bitBltFix and x or y)
+        end
+    end
+    gpu.record(self)
+    return screenBuffer, buffer
 end
 
----copy to previous buffer and free buffer
----@param defaultBuffer number
----@param newBuffer number
-function Frame:_restoreBuffer(defaultBuffer, newBuffer)
-    local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
-    if (newBuffer and newBuffer ~= defaultBuffer) then
-        gpu.bitblt(defaultBuffer, x, y, width, height, newBuffer, bitBltFix and y or x, bitBltFix and x or y)
-        gpu.setActiveBuffer(defaultBuffer)
-        gpu.freeBuffer(newBuffer)
+---Finish drawing a root frame: copy its buffer to the screen if the frame changed.
+---@param screenBuffer? number
+---@param buffer? number
+function Frame:_restoreBuffer(screenBuffer, buffer)
+    if not screenBuffer then return end
+    local changed = gpu.finish(self)
+    if buffer then
+        if changed then
+            local x, y = self:absX(), self:absY()
+            gpu.bitblt(screenBuffer, x, y, self:width(), self:height(), buffer, bitBltFix and y or x, bitBltFix and x or y)
+        end
+        gpu.setActiveBuffer(screenBuffer)
     end
 end
+
+local function byZ(a, b) return a:z() < b:z() end
 
 function Frame:_sort()
     local unsorted = false
@@ -227,15 +248,14 @@ function Frame:_sort()
             break
         end
     end
-    if (unsorted) then table.sort(self._childs, function(a, b) return a:z() < b:z() end) end
+    if (unsorted) then table.sort(self._childs, byZ) end
 end
 
 ---Draw the widgets in the container
 function Frame:draw()
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
     if (not self:visible()) or x==nil or y == nil or width == nil or height == nil then return end
-    --init frame buffer
-    local defaultBuffer, newBuffer = self:_initBuffer()
+    local screenBuffer, buffer = self:_initBuffer()
 
     --clean background
     local newBG = self:backgroundColor()
@@ -248,7 +268,9 @@ function Frame:draw()
         self:_gpufill(x, y, width, height, " ", true)
     end
     if not self._childs or #self._childs == 0 then
-        return self.drawBorder and self:drawBorder() or false
+        local drawn = self.drawBorder and self:drawBorder() or false
+        self:_restoreBuffer(screenBuffer, buffer)
+        return drawn
     end
         
     --sort widgets by z
@@ -274,9 +296,13 @@ function Frame:draw()
     
     if self.drawBorder and not self._borderoverride then self:drawBorder() end
     --might need to call self:drawBorder() like for the elements ^
-    --restore buffer
-    self:_restoreBuffer(defaultBuffer, newBuffer)
+    self:_restoreBuffer(screenBuffer, buffer)
     return true
+end
+
+function Frame:Destroy(force)
+    if self._buffer then gpu.freeBuffer(self._buffer) end
+    return Widget.Destroy(self, force)
 end
 
 ---Should the fix for bitBlt be used. Only apply to old OC versions.

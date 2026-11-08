@@ -1,5 +1,6 @@
-local gpu       = require("component").gpu
-local class     = require("libClass2")
+local checkArg = require("yawl-e.util").checkArg
+local gpu       = require("yawl-e.gpu")
+local class     = require("yawl-e.class")
 local Widget    = require("yawl-e.widget.Widget")
 local ImageFile = require("yawl-e.ImageFile")
 
@@ -19,7 +20,7 @@ local Image = class(Widget)
 ---@param img ImageFile|string
 function Image:new(parent, x, y, img)
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o Image
     if (type(img) == "string") then
         o._imageData = ImageFile(img)

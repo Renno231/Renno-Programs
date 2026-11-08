@@ -1,3 +1,4 @@
+local checkArg = require("yawl-e.util").checkArg
 --[[
     basically, Window is the ported (and upgraded) version of the Window that I create for my legacy GDS visual library.
     would need to use border draw override and draw border manually
@@ -13,12 +14,12 @@
 ]]
 
 local keyboard = require('keyboard')
-local class = require("libClass2")
+local class = require("yawl-e.class")
 local ScrollFrame = require("yawl-e.widget.ScrollFrame")
 local Tab = require("yawl-e.util").Tab
 local unicode = require("unicode")
 local computer = require("computer")
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 
 local Window = class(ScrollFrame) 
 
@@ -29,7 +30,7 @@ function Window:new(parentFrame, x, y, width, height)
     checkArg(4, width, 'number', 'nil')
     checkArg(5, height, 'number', 'nil')
     local o = self.parent(parentFrame, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o._tabs = {} --might need an unordered version
     o._tabsSorted = {}
     o._tabCount = 0
@@ -145,8 +146,14 @@ function Window:selectTab(tabname, state) --method name not set in stone
     end
 end
 
+-- most recently selected first; ties by name so the order (and the drawn frame) is stable
+local function byLastSelected(a, b)
+    if a._lastSelected ~= b._lastSelected then return a._lastSelected > b._lastSelected end
+    return a._name < b._name
+end
+
 function Window:_sortTabs()
-    table.sort(self._tabsSorted, function(a,b) return a._lastSelected > b._lastSelected end)
+    table.sort(self._tabsSorted, byLastSelected)
 end
 
 function Window:defaultCallback(_, eventName, uuid, x, y, button, playerName) --needs refinement

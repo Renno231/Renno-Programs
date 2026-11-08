@@ -1,3 +1,4 @@
+local checkArg = require("yawl-e.util").checkArg
 ---@class Widget:Object
 ---@field private _parentFrame Frame
 ---@field private _position Position
@@ -9,8 +10,8 @@
 ---@field private _callbackArgs table
 ---@operator call:Widget
 ---@overload fun(parent:Frame,x:number,y:number):Widget
-local Widget = require("libClass2")()
-local gpu = require("component").gpu
+local Widget = require("yawl-e.class")()
+local gpu = require("yawl-e.gpu")
 local unicode = require("unicode")
 local event = require("event")
 local component = require"component"
@@ -32,15 +33,13 @@ function Widget:new(parent, x, y)
     else
         checkArg(3, y, 'nil')
     end
-    local o = self.parent()
-    setmetatable(o, {__index = self})
+    local o = setmetatable({}, self)
     ---@cast o Widget
     o._parentFrame = parent
     o._position = {x = x, y = y, z = 0}
     o._size = {width = 1, height = 1}
-    o._welds = {} --just for reference on doing cleanup
-    o._listeners = {}
-    
+    -- _welds (widgets welded to this one) and _listeners (event listener ids) are created on first use
+
     if (parent) then parent:addChild(o) end
     return o
 end
@@ -321,8 +320,10 @@ end
 ---```lua
 ---function callback(self,[...,],...signalData) end
 
+local none = {}
+
 function Widget:closeListeners()
-    for _, id in pairs(self._listeners) do
+    for _, id in pairs(self._listeners or none) do
         if (type(id) == 'number') then event.cancel(id) end
     end
     return true
@@ -549,7 +550,7 @@ function Widget:weld(weldedTo, x, y) --could make x and y into functions that re
     checkArg(3, y, 'function', 'number', 'nil')
     local currentWeldedTo = self._weld and self._weld.weldedTo
     local oldVal = self._weld
-    if type(weldedTo)=="table" and weldedTo._welds and x and y then
+    if type(weldedTo)=="table" and weldedTo.weld and x and y then
         if currentWeldedTo then
             if currentWeldedTo._parentFrame then
                 currentWeldedTo._parentFrame._weldCount = currentWeldedTo._parentFrame._weldCount - 1
@@ -557,7 +558,8 @@ function Widget:weld(weldedTo, x, y) --could make x and y into functions that re
             currentWeldedTo._welds[self] = nil --break and old welds
         end
         self._weld = {weldedTo = weldedTo, x = x, y = y}
-        weldedTo._welds[self] = true 
+        weldedTo._welds = weldedTo._welds or {}
+        weldedTo._welds[self] = true
         if weldedTo._parentFrame then
             weldedTo._parentFrame._weldCount = weldedTo._parentFrame._weldCount + 1
         end 
@@ -590,7 +592,7 @@ end
 
 function Widget:breakWelds()
     self:weld(false) -- breaks its own weld
-    for obj, _ in pairs (self._welds) do
+    for obj, _ in pairs (self._welds or none) do
         obj:weld(false) -- breaks any attached welds
     end
 end

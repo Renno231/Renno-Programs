@@ -1,4 +1,5 @@
-local class = require("libClass2")
+local checkArg = require("yawl-e.util").checkArg
+local class = require("yawl-e.class")
 local Frame = require("yawl-e.widget.Frame")
 
 ---@class LinkedWidget:Frame
@@ -15,7 +16,7 @@ local LinkedWidget = class(Frame)
 function LinkedWidget:new(parent, x, y)
     checkArg(1, parent, "table")
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o LinkedWidget
     return o
 end

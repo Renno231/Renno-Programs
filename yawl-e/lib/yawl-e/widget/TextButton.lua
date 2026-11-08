@@ -1,6 +1,7 @@
+local checkArg = require("yawl-e.util").checkArg
 --text class object with a :value() and defaultCallback for touch
 local Text = require("yawl-e.widget.Text")
-local TextButton = require("libClass2")(Text)
+local TextButton = require("yawl-e.class")(Text)
 local unicode = require("unicode")
 
 function TextButton:new(parent, x, y, width, height, text, foregroundColor)
@@ -13,7 +14,7 @@ function TextButton:new(parent, x, y, width, height, text, foregroundColor)
     checkArg(5, height, 'number')
     if (type(x) == "table") then checkArg(3, y, 'nil') else checkArg(3, y, 'number') end
     local o = self.parent(parent, x, y, text, foregroundColor)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o Text
     o:size(width or unicode.len(self._parsedText and self._parsedText[1] or text or " "), height)
     o:textHorizontalAlignment("center")

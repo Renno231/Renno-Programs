@@ -1,9 +1,10 @@
-local gpu = require("component").gpu
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
 local Widget = require("yawl-e.widget.Widget")
 local unicode = require("unicode")
 ---@class ProgressBar:Widget
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,min:number|nil,max:number|nil,backgroundColor:number|nil,foregroundColor:number|nil):ProgressBar
-local ProgressBar = require("libClass2")(Widget)
+local ProgressBar = require("yawl-e.class")(Widget)
 ---@param parent Frame
 ---@param x number
 ---@param y number
@@ -23,7 +24,7 @@ function ProgressBar:new(parent, x, y, width, height, backgroundColor, foregroun
     checkArg(6, backgroundColor, 'number', 'nil')
     checkArg(6, foregroundColor, 'number', 'nil')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     o._size = {width = 1, height = 1}
     ---@cast o ProgressBar
     o:size(width, height) --probably need to override the size so minimum is 1x1

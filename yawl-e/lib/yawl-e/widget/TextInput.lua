@@ -1,8 +1,9 @@
+local checkArg = require("yawl-e.util").checkArg
 local event = require("event")
 local unicode = require("unicode")
-local class = require("libClass2")
+local class = require("yawl-e.class")
 local Text = require("yawl-e.widget.Text")
-local gpu = require("component").gpu
+local gpu = require("yawl-e.gpu")
 local computer = require"computer"
 
 --[[
@@ -118,6 +119,7 @@ end
 function TextInput:defaultCallback(_, eventName, uuid, x, y, button, playerName)
     if (eventName ~= "touch") then return end
     if button ~= 0 then self:text("") end
+    self._listeners = self._listeners or {}
     if button == 0 and (not self._listeners.keyDownEvent) then
         self._listeners.keyDownEvent = event.listen("key_down", function(...) 
             local _, screen, _, _, plr = ...
@@ -239,6 +241,16 @@ function TextInput:cursorChar(char)
 end
 
 
+---Show every character as `char`, for passwords. `false` shows the text again.
+---@param char? string|false
+---@return string|false
+function TextInput:mask(char)
+    checkArg(1, char, 'string', 'boolean', 'nil')
+    local oldValue = self._mask or false
+    if char == false then self._mask = nil elseif char then self._mask = char end
+    return oldValue
+end
+
 function TextInput:append(str) --inserts at the current cursor position
 
 end
@@ -304,8 +316,14 @@ function TextInput:draw()if not self:visible() then return end
     local cursorBlinks, cursorChar = self:cursorBlinks(), self:cursorChar()
     local cursorX, cursorY = self:cursorXY()
     -- if height > 1 or textheight > 1 then
+        local lines = self._parsedText
+        local mask = self._mask
+        if mask then
+            lines = {}
+            for n, line in ipairs(self._parsedText) do lines[n] = mask:rep(unicode.len(line)) end
+        end
         local i, relativeX, relativeY, maxY = 1, 0, 0, y+height
-        local str = self._parsedText[i]
+        local str = lines[i]
         local currentY = yStart+relativeY
         while (currentY+(textheight>1 and 1 or 0)) < maxY and str and yStart+textheight>=y do
             if str then
@@ -313,7 +331,7 @@ function TextInput:draw()if not self:visible() then return end
                 currentY = yStart+relativeY
                 if currentY >= y then
                     self:_gpuset(xStart+relativeX, currentY, str, true)
-                    if self._listeners.keyDownEvent and i == cursorY then
+                    if self._listeners and self._listeners.keyDownEvent and i == cursorY then
                         --cursorBlinks, uses time to optionally show cursor, otherwise always shows
                         if str then
                             cursorChar = unicode.charAt(str, cursorX)
@@ -341,7 +359,7 @@ function TextInput:draw()if not self:visible() then return end
                 end
                 i=i+1
             end
-            str = self._parsedText[i]
+            str = lines[i]
         end
     -- else
     --     local str = self:text():gsub("\n","")

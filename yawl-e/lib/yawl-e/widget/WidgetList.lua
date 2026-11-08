@@ -5,7 +5,7 @@ local Frame = require("yawl-e.widget.Frame")
 ---@overload fun():WidgetList
 ---@overload fun(parent:WidgetList):WidgetList
 ---@overload fun(parent:WidgetList,x:number,y:number):WidgetList
-local WidgetList = require('libClass2')(Frame)
+local WidgetList = require("yawl-e.class")(Frame)
 
 function WidgetList:draw()
     if (self:visible() == false) then return end

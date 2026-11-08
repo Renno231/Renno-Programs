@@ -1,5 +1,6 @@
-local gpu = require("component").gpu
-local class = require("libClass2")
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
+local class = require("yawl-e.class")
 local Widget = require("yawl-e.widget.Widget")
 
 ---@class ToggleSwitch:Widget
@@ -29,7 +30,7 @@ function ToggleSwitch:new(parent, x, y, width, height, backgroundColor, foregrou
     checkArg(7, foregroundColor, 'number', 'nil')
     checkArg(8, activeBG, 'number', 'nil')
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o ToggleSwitch
     o._value = false
     o._slider = {x = 0, width = height, height = height, backgroundColor = foregroundColor or 0xffffff}

@@ -1,4 +1,5 @@
-local gpu = require("component").gpu
+local checkArg = require("yawl-e.util").checkArg
+local gpu = require("yawl-e.gpu")
 local wrap = require("yawl-e.util").wrap
 local unicode = require("unicode")
 --=============================================================================
@@ -23,7 +24,7 @@ local txtOffsets = {
 ---@overload fun(parent:Frame,x:number,y:number,text:string,foregroundColor:number):Text
 ---@operator call:Text
 local Widget = require("yawl-e.widget.Widget")
-local Text = require('libClass2')(Widget)
+local Text = require("yawl-e.class")(Widget)
 
 ---@param parent Frame
 ---@param x number
@@ -39,7 +40,7 @@ function Text:new(parent, x, y, text, foregroundColor)
     checkArg(5, foregroundColor, 'number', 'nil')
     if (type(x) == "table") then checkArg(3, y, 'nil') else checkArg(3, y, 'number') end
     local o = self.parent(parent, x, y)
-    setmetatable(o, {__index = self})
+    setmetatable(o, self)
     ---@cast o Text
     o:text(text)
     o:textOffset("top left") --normal
