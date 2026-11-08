@@ -143,6 +143,9 @@ end
 local function randomModQ()
     while true do
         local s = {unpack(random.random(), 1, 21)}
+        -- q's top limb is below 2^22: keep 22 bits so ~94% of draws are accepted instead of ~23%.
+        -- Accepted values are distributed exactly as before.
+        s[21] = s[21] % 64
         local result = decodeInt(s)
         if result[7] < q[7] then
             return setmetatable(result, modQMT)

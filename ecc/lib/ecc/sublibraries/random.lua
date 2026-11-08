@@ -43,26 +43,19 @@ feed(tostring({}))
 digest()
 feed(tostring(os.time()))
 digest()
--- Add entropy by counting.
-local countTable = {}
-local countf = assert(load("local e=require('os').time return function()return{" .. ("e(),"):rep(256):sub(1,-2) .. "}end"))()
-for i = 1, 300 do
-    while true do
-        local t = countf()
-        local t1 = t[1]
-        if t1 ~= t[256] then
-            for j = 1, 256 do
-                if t1 ~= t[j] then
-                    countTable[i] = j - 1
-                    break
-                end
-            end
-        end
-        break
-    end
+-- Add timing jitter. os.time() only changes once per game tick, so counting calls between its
+-- changes (the ComputerCraft approach) yields almost nothing here; os.clock() is this machine's
+-- CPU time in nanoseconds and varies from run to run. The address separates computers that
+-- booted from copies of the same disk, /.random included.
+local computer = require("computer")
+feed(computer.address())
+feed(tostring(computer.uptime()))
+local samples = {}
+for i = 1, 64 do
+    for _ = 1, i % 7 do feed(tostring({})) end
+    samples[i] = ("%.9f"):format(os.clock())
 end
-
-feed(mapToStr(countTable))
+feed(table.concat(samples, "|"))
 digest()
 
 local function save()
@@ -87,12 +80,14 @@ local function seed(data)
     save()
 end
 
+-- /.random carries entropy across reboots. Each load reads it and immediately writes the next
+-- value (save above), so no boot reuses a state; output doesn't need to touch the disk.
 local function newRandom()
     feed("random")
     feed(tostring(os.time()))
+    feed(("%.9f"):format(os.clock()))
     feed(tostring({}))
     digest()
-    save()
 
     local result = sha256.hmac("out", entropy)
     entropy = tostring(sha256.digest(entropy))

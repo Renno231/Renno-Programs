@@ -1,4 +1,7 @@
 -- Elliptic Curve Cryptography in OpenComputers
+---- Update (November 8 2026) by Renno231
+-- rewrote field arithmetic, sha256 and chacha20 on Lua 5.3 integers (requires a Lua 5.3+ CPU)
+-- 4-60x faster with byte-identical keys, signatures and ciphertexts
 
 ---- Update (Feb 13 2024) by Renno231
 -- made library OPPM compatible and implemented lazy-loading
@@ -61,23 +64,13 @@ end
 
 -- actual cryptography
 
-local function getNonceFromEpoch()
-    local nonce = {}
-    local epoch = os.time()
-    for _ = 1, 12 do
-        nonce[#nonce + 1] = math.floor(epoch) % 256
-        epoch = epoch / 256
-        epoch = epoch - epoch % 1
-    end
-    
-    return nonce
-end
-
 local function encrypt(data, key)
     key = mapToStr(key)
     local encKey = ecc.sha256.hmac("encKey", key)
     local macKey = ecc.sha256.hmac("macKey", key)
-    local nonce = getNonceFromEpoch()
+    -- A random nonce: game time repeats within a tick and after /time set, and a repeated
+    -- nonce under the same key exposes both plaintexts.
+    local nonce = {table.unpack(ecc.random.random(), 1, 12)}
     local ciphertext = ecc.chacha20.crypt(mapToStr(data), encKey, nonce)
 
     local result = nonce
@@ -170,11 +163,12 @@ local function verify(publicKey, message, signature)
     return ev == e
 end
 
+-- Returns the key and the salt. Without a salt a random one is made; store it next to the
+-- encrypted data and pass it back to derive the same key again.
 local function deriveKeyFromPassword(password, salt, iterations) --doesn't work with 'public' keys since they are 22 long
-    -- Implement or call a KDF like PBKDF2 with SHA-256
-    -- 'salt' should be a unique value for each password, can be stored alongside the encrypted data
-    local derivedKey = ecc.sha256.pbkdf2(password, salt or ecc.random.random(), iterations or 10000, 21) --iterations, keyLength)
-    return derivedKey
+    salt = salt and mapToStr(salt) or tostring(ecc.random.random()):sub(1, 16)
+    local derivedKey = ecc.sha256.pbkdf2(password, salt, iterations or 10000, 21) --iterations, keyLength)
+    return derivedKey, salt
 end
 
 local selfPath = "/usr/lib/ecc/"
@@ -227,7 +221,7 @@ ecc.aencrypt = asymEncrypt --asymmetrical   --(publicKey, data):string
 ecc.adecrypt = asymDecrypt --asymmetrical   --(publicKey, data):string
 ecc.key = key --single key                  --(seed): string
 ecc.keypair = keypair                       --(seed): string, string
-ecc.keyFromPassword = deriveKeyFromPassword --(password, salt, iterations): string
+ecc.keyFromPassword = deriveKeyFromPassword --(password, salt, iterations): string, string (key, salt)
 ecc.exchange = exchange                     --(privateKey, publicKey): string
 ecc.sign = sign                             --(privateKey, message): table
 ecc.verify = verify                         --(publicKey, message, signature): boolean

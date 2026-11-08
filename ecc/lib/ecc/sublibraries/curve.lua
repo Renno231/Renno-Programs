@@ -31,16 +31,18 @@ local curve = {}
 -- Completeness? Yes: The curve is complete.
 -- Indistinguishability? Yes (Elligator 2), but not implemented.
 
-local isEqual = lazyLoad("arith", "isEqual")
-local NAF = lazyLoad("arith", "NAF")
-local encodeInt = lazyLoad("arith", "encodeInt")
-local decodeInt = lazyLoad("arith", "decodeInt")
-local multModP = lazyLoad("modp", "multModP")
-local squareModP = lazyLoad("modp", "squareModP")
-local addModP = lazyLoad("modp", "addModP")
-local subModP = lazyLoad("modp", "subModP")
-local montgomeryModP = lazyLoad("modp", "montgomeryModP")
-local expModP = lazyLoad("modp", "expModP")
+-- Point arithmetic runs thousands of field operations per scalar multiplication, so the field
+-- functions are bound directly rather than through lazy-loading wrappers.
+local arith, modp = ecc.arith, ecc.modp
+local isEqual = arith.isEqual
+local encodeInt = arith.encodeInt
+local decodeInt = arith.decodeInt
+local multModP = modp.multModP
+local squareModP = modp.squareModP
+local addModP = modp.addModP
+local subModP = modp.subModP
+local montgomeryModP = modp.montgomeryModP
+local expModP = modp.expModP
 local inverseMontgomeryModQ = lazyLoad("modq", "inverseMontgomeryModQ")
 
 local pointMT
@@ -167,6 +169,39 @@ local function pointIsInf(P1)
     return isEqual(P1[1], ZERO)
 end
 
+-- (2^w)-ary Non-Adjacent Form of a 168-bit scalar, least significant digit first.
+local function NAF(d, w)
+    local d1, d2, d3, d4, d5, d6, d7 = d[1] | 0, d[2] | 0, d[3] | 0, d[4] | 0, d[5] | 0, d[6] | 0, d[7] | 0
+    local window, half = (1 << w) - 1, 1 << (w - 1)
+    local t = {}
+    for i = 1, 168 do
+        local digit = 0
+        if d1 & 1 == 1 then
+            digit = d1 & window
+            if digit >= half then digit = digit - (1 << w) end
+            d1 = d1 - digit
+            if d1 > 0xFFFFFF then
+                -- a negative digit was added back; carry it up
+                d2 = d2 + (d1 >> 24); d1 = d1 & 0xFFFFFF
+                d3 = d3 + (d2 >> 24); d2 = d2 & 0xFFFFFF
+                d4 = d4 + (d3 >> 24); d3 = d3 & 0xFFFFFF
+                d5 = d5 + (d4 >> 24); d4 = d4 & 0xFFFFFF
+                d6 = d6 + (d5 >> 24); d5 = d5 & 0xFFFFFF
+                d7 = d7 + (d6 >> 24); d6 = d6 & 0xFFFFFF
+            end
+        end
+        t[i] = digit
+        d1 = (d1 >> 1) | ((d2 & 1) << 23)
+        d2 = (d2 >> 1) | ((d3 & 1) << 23)
+        d3 = (d3 >> 1) | ((d4 & 1) << 23)
+        d4 = (d4 >> 1) | ((d5 & 1) << 23)
+        d5 = (d5 >> 1) | ((d6 & 1) << 23)
+        d6 = (d6 >> 1) | ((d7 & 1) << 23)
+        d7 = d7 >> 1
+    end
+    return t
+end
+
 -- W-ary Non-Adjacent Form (wNAF) method for scalar multiplication:
 -- https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#w-ary_non-adjacent_form_(wNAF)_method
 local function scalarMult(multiplier, P1)
@@ -174,18 +209,30 @@ local function scalarMult(multiplier, P1)
     local naf = NAF(multiplier, 5)
     local PTable = {P1}
     local P2 = pointDouble(P1)
-    local Q = {{unpack(ZERO)}, {unpack(ONE)}, {unpack(ONE)}}
+    local NTable = {}
 
     for i = 3, 31, 2 do
         PTable[i] = pointAdd(PTable[i - 2], P2)
     end
+    for i = 1, 31, 2 do
+        NTable[i] = pointNeg(PTable[i])
+    end
 
-    for i = #naf, 1, -1 do
+    -- Start from the top non-zero digit instead of doubling the identity.
+    local top = 168
+    while top > 0 and naf[top] == 0 do top = top - 1 end
+    if top == 0 then
+        return setmetatable({{unpack(ZERO)}, {unpack(ONE)}, {unpack(ONE)}}, pointMT)
+    end
+    local Q = naf[top] > 0 and PTable[naf[top]] or NTable[-naf[top]]
+
+    for i = top - 1, 1, -1 do
         Q = pointDouble(Q)
-        if naf[i] > 0 then
-            Q = pointAdd(Q, PTable[naf[i]])
-        elseif naf[i] < 0 then
-            Q = pointSub(Q, PTable[-naf[i]])
+        local digit = naf[i]
+        if digit > 0 then
+            Q = pointAdd(Q, PTable[digit])
+        elseif digit < 0 then
+            Q = pointAdd(Q, NTable[-digit])
         end
     end
 

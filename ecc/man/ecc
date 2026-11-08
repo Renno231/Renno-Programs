@@ -2,7 +2,7 @@ NAME
   ecc - Elliptic Curve Cryptography library for OpenComputers
 
 DESCRIPTION
-  ECC is a cryptographic library ported to OpenComputers by Renno231, designed for efficient memory usage through lazy-loading. It allows for direct indexing or using the load metamethod function to manage module availability. The unload method functions similarly, either unloading all cached libraries or a specific one by name. ECC supports a variety of cryptographic operations, including ECDH, without requiring a data card. Sublibraries such as chacha20, sha256, and random (for cryptographically secure randomness) are exposed and require ECC for operation.
+  ECC is a cryptographic library ported to OpenComputers by Renno231, designed for efficient memory usage through lazy-loading. It allows for direct indexing or using the load metamethod function to manage module availability. The unload method functions similarly, either unloading all cached libraries or a specific one by name. ECC supports a variety of cryptographic operations, including ECDH, without requiring a data card. It requires a Lua 5.3 (or newer) CPU architecture. Sublibraries such as chacha20, sha256, and random (for cryptographically secure randomness) are exposed and require ECC for operation.
 
 EXAMPLES
   local ecc = require("ecc")
