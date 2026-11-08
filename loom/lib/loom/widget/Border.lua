@@ -53,21 +53,21 @@ function Border:draw()
     --sort widgets by z
     self:_sort()
     local isRoot = self:getParent() == nil
-    if isRoot then self:_tweenStep() end
+    if isRoot then self:_animate() end
     --calculate tweens accordingly
     local width, height = self:size()
     local autoWidth, autoHeight = self:autoFit()
     if #self._childs>0 and autoWidth or autoHeight then
         width, height = autoWidth and 2 or width, autoHeight and 2 or height
         local hasWelds = self._weldCount > 0
-        local tweenOrWeld = hasWelds and "_calculateWeld" or "_tweenStep"
+        local animateOrWeld = hasWelds and "_calculateWeld" or "_animate"
         if hasWelds then
             for _, element in pairs(self._childs) do
-                element:_tweenStep()
+                element:_animate()
             end
         end
         for _, element in pairs(self._childs) do
-            element[tweenOrWeld](element)
+            element[animateOrWeld](element)
             --calcualte the Border dimensions and whatnot here after tweenstep
             if element:visible() then
                 local distWidth = element:x() + element:width()

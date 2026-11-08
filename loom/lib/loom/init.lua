@@ -6,10 +6,18 @@
 ---@field width number
 ---@field height number
 
----@class yaowbgllib
+local run = require('loom.run')
+---@class loomlib
 local loom = {
     widget = require('loom.widget'),
-    util = require('loom.util')
+    util = require('loom.util'),
+    ---Draw a root frame whenever something may have changed, until `loom.stop()`. See loom/run.lua.
+    run = run.run,
+    stop = run.stop,
+    ---Ask `loom.run` for a redraw within `delay` seconds (default now).
+    invalidate = run.request,
+    ---Handle widget errors yourself: `loom.onError(function(widget, message, during) end)`. See loom/run.lua.
+    onError = run.onError,
 }
 
 -- ImageFile is only needed by programs that load images; load it on first use.

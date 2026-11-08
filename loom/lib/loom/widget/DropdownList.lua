@@ -79,7 +79,7 @@ function DropdownList:drop(value) --boolean or nil
     if self._list and value~=nil then
         self._isDropped = value
         self:invokeCallback(value and "dropped" or "retracted")
-        self._list[self:animatedDrop() and "tweenSize" or "size"](self._list, self:width(), value and (self:listHeight() or #self._list:list()) or 0)
+        self._list[self:animatedDrop() and "resizeTo" or "size"](self._list, self:width(), value and (self:listHeight() or #self._list:list()) or 0)
     end
     return oldValue
 end

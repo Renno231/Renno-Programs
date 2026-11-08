@@ -2,6 +2,7 @@ local checkArg = require("loom.util").checkArg
 local Rectangle = require("loom.widget.Rectangle")
 local gpu = require("loom.gpu")
 local computer = require("computer")
+local run = require("loom.run")
 
 ---@class Button
 ---@overload fun(parent:Frame,x:number,y:number,width:number,height:number,backgroundColor:number)
@@ -44,8 +45,9 @@ end
 function Button:draw()
     if (not self:visible()) then return end
     local isActive = self:activate()
-    if isActive and self:shouldReset() and computer.uptime() - self._pressed > self:resetTime() then
-        self:activate(false)
+    if isActive and self:shouldReset() then
+        local left = self:resetTime() - (computer.uptime() - self._pressed)
+        if left < 0 then self:activate(false) isActive = false else run.request(left) end
     end
     local newBG = isActive and (self:foregroundColor() or 0xffffff-self:backgroundColor()) or self:backgroundColor()
     local oldBG = gpu.setBackground(newBG)

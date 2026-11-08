@@ -1,80 +1,63 @@
 local checkArg = require("loom.util").checkArg
---[[
-    UIGrid as a frame, on parent element size and position get stored, and un unparent get restored (overloaded parent function), 
-    but during draw they forced into a grid of x columns and y rows. 
-    Has padding and scrolling. Scroll moves all elements up/down/left/right by 1.
-    ColumnWidth, RowHeight. Or cellWidth and cellHeight and cellSize? If unset or set to false, autofit to cols and rows
-]]
-
-local class = require("loom.class")
 local Frame = require("loom.widget.Frame")
-local gpu = require("loom.gpu")
 
---[[
-    TODO
-        finish grid logic
-]]
+---A frame that places its children in a grid, left to right then top to bottom, and sizes each to
+---its cell. Set `columns`; cells share the width unless `cellSize` fixes it, and are one row high
+---unless `cellSize` says otherwise. `rows` limits how many rows show. Removing a child gives back
+---the position and size it had before it joined the grid. `scrollX`/`scrollY` move the grid.
+---@class UIGrid:Frame
+---@operator call:UIGrid
+---@overload fun(parent?:Frame,x?:number,y?:number):UIGrid
+local UIGrid = require("loom.class")(Frame)
 
-local UIGrid = class(Frame) 
-
-function UIGrid:addChild(containerChild)
+function UIGrid:addChild(child)
     self._childData = self._childData or {}
-    local x,y = containerChild:position()
-    local width, height =  containerChild:size()
-    self._childData[containerChild] = {x,y,width,height}
-    table.insert(self._childs, containerChild)
+    local x, y = child:position()
+    local width, height = child:size()
+    self._childData[child] = {x, y, width, height}
+    return Frame.addChild(self, child)
 end
 
 function UIGrid:removeChild(child)
-    local childId = 0
-    for i, v in pairs(self._childs) do
-        if (v == child) then childId = i end
-    end
-    if (childId > 0) then
-        table.remove(self._childs, childId)
-        return child
-    end
-    if self._childData then --restore size and position
-        local cdata = self._childData[child]
-        child:position(cdata[1], cdata[2])
-        child:size(cdata[3], cdata[4])
+    local data = self._childData and self._childData[child]
+    if data then
         self._childData[child] = nil
+        child:position(data[1], data[2])
+        child:size(data[3], data[4])
+    end
+    return Frame.removeChild(self, child)
+end
+
+local function getset(field, default)
+    return function(self, value)
+        checkArg(1, value, 'number', 'nil')
+        local old = self[field] or default
+        if value then self[field] = value end
+        return old
     end
 end
 
-function UIGrid:columns(num)
+---Number of columns (default 1).
+UIGrid.columns = getset("_columns", 1)
+---Rows shown; children past them are hidden. 0 (default) shows every row.
+UIGrid.rows = getset("_rows", 0)
+---Cells between columns (default 0).
+UIGrid.columnPadding = getset("_padX", 0)
+---Cells between rows (default 0).
+UIGrid.rowPadding = getset("_padY", 0)
+---Fixed cell width. 0 (default) shares the grid's width between the columns.
+UIGrid.cellWidth = getset("_cellWidth", 0)
+---Cell height (default 1).
+UIGrid.cellHeight = getset("_cellHeight", 1)
 
-end
-
-function UIGrid:columnPadding(num)
-
-end
-
-
-function UIGrid:rowPadding(num)
-
-end
-
+---@return number columnPadding,number rowPadding
 function UIGrid:padding(x, y)
-
+    return self:columnPadding(x), self:rowPadding(y)
 end
 
-function UIGrid:rows(num)
-
-end
-
-function UIGrid:cellWidth(num)
-
-end
-
-function UIGrid:cellHeight(num)
-
-end
-
+---@return number cellWidth,number cellHeight
 function UIGrid:cellSize(width, height)
-    --not finished
-    self:cellWidth(width)
-    self:cellHeight(height)
+    return self:cellWidth(width), self:cellHeight(height)
 end
 
 function UIGrid:scrollX(num)
@@ -91,37 +74,30 @@ function UIGrid:scrollY(num)
     return oldValue
 end
 
+---Place and size every child in its cell.
+---@package
 function UIGrid:_calculateGrid()
-    local colmax, rowmax = self:columns(), self:rows()
-    if #self._childs == 0 or colmax == 0 or rowmax == 0 then return end
+    local columns, rows = math.max(1, self:columns()), self:rows()
+    local padX, padY = self:padding()
+    local inset = self:bordered() and 1 or 0
     local width, height = self:cellSize()
-    local padx, pady = self:padding()
-    local scrollx, scrolly = self:scrollX(), self:scrollY()
-    local col, row = 1,1
-    for _, child in ipairs (self._childs) do
-        --probably need some logic for welds
-        if row > rowmax then
-            child:visible(false)
-        else
-            child:visible(true)
-            if child._tweenPos then child._tweenPos = nil end
-            if child._tweenSize then 
-                child._tweenSize.goal.width, child._tweenSize.goal.height = math.min(width, child._tweenSize.goal.width), math.min(height, child._tweenSize.goal.height)
-            end
-            if child:width() > width then child:width(width) end
-            if child:height() > height then child:height(height) end
-            child:position((width + padx) * (col-1) - scrollx, (height + pady) * (row - 1) - scrolly)
-            if col == colmax then
-                col, row = 1, row + 1
-            else
-                col = col + 1
-            end
-        end
+    if width <= 0 then
+        width = math.max(1, (self:width() - 2 * inset - padX * (columns - 1)) // columns)
+    end
+    self:_sort()
+    for i, child in ipairs(self._childs) do
+        local column, row = (i - 1) % columns, (i - 1) // columns
+        child:visible(rows <= 0 or row < rows)
+        child._anims, child._layout = nil, nil -- the grid decides
+        child:position(1 + inset + column * (width + padX), 1 + inset + row * (height + padY))
+        child:size(width, height)
     end
 end
 
 function UIGrid:draw()
     if not self:visible() then return end
-    
-    return true
+    self:_calculateGrid()
+    return Frame.draw(self)
 end
+
+return UIGrid

@@ -1,73 +1,57 @@
 # TextInput Widget
 
-The `TextInput` widget is a custom UI component in Lua, designed to provide a text input functionality. It extends from the `Text` class.
-
-## Class Definition
+An editable text field. Touch it, or Tab to it, to type. Single-line fields scroll sideways to keep the cursor in view; fields taller than one line are multiline and scroll both ways.
 
 ```lua
----@class TextInput:Text
----@field private _listeners.keyDownEvent number
----@field private _listeners.touchEvent number
----@operator call:TextInput
----@overload fun(parent:Frame,x:number,y:number,text:string,foregroundColor:number):TextInput
-local TextInput = class(Text)
+local name = gui.TextInput(root, 10, 5, "", 0xffffff)
+name:size(20, 1)
+name:backgroundColor(0x113355)
+name:placeholder("your name")
+name:on("submit", function(self, text) print("hello " .. text) end)
 ```
 
 ## Constructor
 
-The constructor for the `TextInput` widget is defined as follows:
-
 ```lua
-function TextInput:new(parent, x, y, text, foregroundColor)
+gui.TextInput(parent, x, y, text, foregroundColor)
 ```
 
-### Parameters
+`text` and `foregroundColor` are optional.
 
-- `parent`: The parent frame for the widget.
-- `x`: The x-coordinate for the widget.
-- `y`: The y-coordinate for the widget.
-- `text`: The initial text of the widget.
-- `foregroundColor`: The foreground color of the widget.
+## Keys
+
+| Key | Action |
+|---|---|
+| Left / Right | Move one character (Ctrl: one word) |
+| Up / Down | Move one line in a multiline field, keeping the column across short lines |
+| Home / End | Start / end of the line (Ctrl, or a single-line field: of the text) |
+| Backspace / Delete | Delete one character (Ctrl: one word) |
+| Enter | Submit. In a multiline field Enter inserts a newline and Ctrl+Enter submits |
+| Tab / Shift+Tab | Move to the next / previous field on screen, in reading order |
+| Escape | Leave the field |
+
+Pasting (the clipboard signal) inserts the text at the cursor; a single-line field drops a trailing newline and turns other newlines into spaces. Touching the field puts the cursor under the touch; right-clicking clears it. Touching anywhere else leaves the field. Only the player who focused the field can type in it.
+
+## Events
+
+Passed to `callback` and to `on` handlers:
+
+- `"submit"` (text): Enter was pressed.
+- `"valueChanged"` (old, new): the text changed.
+- `"cursorChanged"` (index, x, y)
+- `"focus"`, `"blur"`
 
 ## Methods
 
-### _onKeyDown
-
-The `_onKeyDown` method is used to handle key down events on the widget.
-
-```lua
-function TextInput:_onKeyDown(eventName, component, char, key, player)
-```
-
-### Parameters
-
-- `eventName`: The name of the event.
-- `component`: The component that triggered the event.
-- `char`: The character code of the key pressed.
-- `key`: The key code of the key pressed.
-- `player`: The player who pressed the key.
-
-### Behavior
-
-This method handles the following keys:
-
-- Backspace & Delete: Removes a character from the text.
-- Arrow keys: Moves the cursor in the text.
-
-### mask
-
-Shows every character as `char`, for password entry. `text()` still returns the typed text. Pass `false` to show the text again. Returns the previous mask, or `false`.
-
-```lua
-local password = gui.TextInput(root, 10, 5, "", 0xffffff)
-password:size(20, 1)
-password:mask("*")
-```
-
-## TODO
-
-The following features are planned to be added in the future:
-
-- Listener for paste event
-- Auto-scroll and auto-size in `_onKeyDown`
-- Fix/finish behavior in `_onKeyDown`
+- `text(...)`: get, or set (arguments joined with spaces; the cursor moves to the end). Returns the old text.
+- `insert(str)`: insert at the cursor.
+- `submit()`: as if Enter was pressed.
+- `focus(player?)`, `blur()`, `focused()`
+- `cursor(index?)`: the cursor as a text index, 0 = before the first character.
+- `cursorXY(x?, y?)`: the cursor as column and line.
+- `clearOnEnter(bool?)`: after submit, clear the field and keep typing (chat style). Otherwise submit leaves the field. Default false.
+- `multilines(bool?)`: default true when the field is taller than one line (three with a border).
+- `maxLength(n|false?)`: longest text accepted.
+- `placeholder(text|false?, color?)`: shown dimmed while the field is empty and not focused.
+- `mask(char|false?)`: show every character as `char`, for passwords. `text()` still returns the typed text.
+- `cursorBlinks(bool?)`, `cursorBlinkTime(seconds?)`: default blinking, 0.5 s.

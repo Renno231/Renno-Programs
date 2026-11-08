@@ -3,6 +3,7 @@ local gpu = require("loom.gpu")
 local Widget = require("loom.widget.Widget")
 local event = require("event")
 local computer = require("computer")
+local run = require("loom.run")
 
 --=============================================================================
 --test bitblt bug
@@ -63,9 +64,9 @@ function Frame:new(parentFrame, x, y)
     o._weldCount = 0
     o._propagateFirst = false
     if (not parentFrame) then
-        local function propagate(...) o:propagateEvent(...) end
+        local function propagate(...) run.guard(o, (...), o.propagateEvent, o, ...) end
         o._listeners = {
-            touch  = event.listen("touch", function(...) o:_touchHandler(...) end),
+            touch  = event.listen("touch", function(...) run.guard(o, "touch", o._touchHandler, o, ...) end),
             drag   = event.listen("drag", propagate),
             drop   = event.listen("drop", propagate),
             scroll = event.listen("scroll", propagate),
@@ -147,7 +148,7 @@ function Frame:propagateEvent(eName, screenAddress, x, y, ...)
                 cSuccess = w:invokeCallback(eName, screenAddress, x, y, ...)
             end
             
-            if cSuccess or (w:lockPropagationOnCallback() and (w:callback() ~= w.defaultCallback or w.defaultCallback~=Widget.defaultCallback)) then
+            if cSuccess or (w:lockPropagationOnCallback() and w:_listens(eName)) then
                 return true
             else
                 return self:invokeCallback(eName, screenAddress, x, y, ...)
@@ -253,6 +254,10 @@ end
 
 ---Draw the widgets in the container
 function Frame:draw()
+    if self._layout and not self:getParent() then -- a root frame lays out against the screen
+        local vw, vh = gpu.getViewport()
+        self:_applyLayout(vw, vh, 0)
+    end
     local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
     if (not self:visible()) or x==nil or y == nil or width == nil or height == nil then return end
     local screenBuffer, buffer = self:_initBuffer()
@@ -276,19 +281,27 @@ function Frame:draw()
     --sort widgets by z
     self:_sort()
     local isRoot = self:getParent() == nil
-    if isRoot then self:_tweenStep() end
+    if isRoot then self:_animate() end
+    local inset = self:bordered() and 1 or 0
     --draw widgets
     local hasWelds = self._weldCount > 0
-    local tweenOrWeld = hasWelds and "_calculateWeld" or "_tweenStep"
+    local animateOrWeld = hasWelds and "_calculateWeld" or "_animate"
     if hasWelds then
         for _, element in pairs(self._childs) do
-            element:_tweenStep()
+            element:_animate()
         end
     end
     for _, element in pairs(self._childs) do --could (technically *should*) have error handling here
-        element[tweenOrWeld](element)
-        local noDrawError, drawReturn = pcall(element.draw, element)
-        
+        if element._layout then element:_applyLayout(width, height, inset) end
+        element[animateOrWeld](element)
+        local bg, fg = gpu.getBackground(), gpu.getForeground()
+        local noDrawError, drawReturn = xpcall(element.draw, debug.traceback, element)
+        if not noDrawError then
+            gpu.setBackground(bg)
+            gpu.setForeground(fg)
+            if not run.error(element, tostring(drawReturn), "draw") then element:_drawError(drawReturn) end
+        end
+
         if noDrawError and drawReturn==true and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end

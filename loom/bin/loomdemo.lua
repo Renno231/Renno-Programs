@@ -1,7 +1,6 @@
 local event = require"event"
-local run = true
 event.listen("interrupted", function()
-    run = false
+    require("loom").stop()
     for i,_ in pairs (package.loaded) do if i:match("^loom") then package.loaded[i] = nil end end
     package.loaded.ecc = nil
     return false
@@ -56,10 +55,7 @@ braille:callback(function(self, _, eventName, uuid, x, y, button, playerName)
 end)
 gui.TextLabel(root, braille:x(), braille:y()-1, "Scroll to see braille characters")
 
-while run do
-    os.sleep()
-    root:draw()
-end
+loom.run(root) -- redraws after events and animations until Ctrl+C
 root:Destroy(true) --always call that on all Frame without a parent. This is used to unregister the event listeners for screen related events
 component.gpu.freeAllBuffers()
 term.clear()

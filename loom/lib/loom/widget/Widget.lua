@@ -15,6 +15,8 @@ local gpu = require("loom.gpu")
 local unicode = require("unicode")
 local event = require("event")
 local component = require"component"
+local computer = require("computer")
+local run = require("loom.run")
 
 function Widget:defaultCallback()
 end
@@ -348,12 +350,117 @@ function Widget:callback(callback, ...)
     end
 end
 
----Invoke the callback method
+---Run `handler(self, ...)` when `eventName` happens, with the event's data (for screen events:
+---screenAddress, x, y, button, playerName). Several handlers can share an event; a handler that
+---returns true stops the event there. Returns the handler, for `off`.
+---@param eventName string
+---@param handler function
+---@return function
+function Widget:on(eventName, handler)
+    checkArg(1, eventName, 'string')
+    checkArg(2, handler, 'function')
+    local handlers = self._handlers
+    if not handlers then handlers = {} self._handlers = handlers end
+    local list = handlers[eventName]
+    if not list then list = {} handlers[eventName] = list end
+    list[#list + 1] = handler
+    return handler
+end
+
+---Remove a handler added with `on`, or every handler for `eventName` if `handler` is nil.
+---@param eventName string
+---@param handler? function
+function Widget:off(eventName, handler)
+    checkArg(1, eventName, 'string')
+    checkArg(2, handler, 'function', 'nil')
+    local list = self._handlers and self._handlers[eventName]
+    if not list then return end
+    for i = #list, 1, -1 do
+        if handler == nil or list[i] == handler then table.remove(list, i) end
+    end
+    if #list == 0 then self._handlers[eventName] = nil end
+end
+
+---Invoke the callback, then the `on` handlers. Returns true if any of them handled the event.
+---@param eventName string
 ---@param ... any Signal data
-function Widget:invokeCallback(...)
+function Widget:invokeCallback(eventName, ...)
     if (not self:enabled()) then return end
-    local callback = self:callback()
-    return callback(self, select(2, self:callback()), ...)
+    local args = self._callbackArgs
+    local handled = (self._callback or self.defaultCallback)(self, args and args[1], eventName, ...)
+    local list = self._handlers and self._handlers[eventName]
+    if list and not handled then
+        for i = 1, #list do
+            if list[i](self, ...) == true then return true end
+        end
+    end
+    return handled
+end
+
+---True if a callback or handler is set for `eventName`; such widgets stop screen events from reaching widgets behind them.
+---@package
+function Widget:_listens(eventName)
+    return (self._callback and self._callback ~= self.defaultCallback) or self.defaultCallback ~= Widget.defaultCallback
+        or (self._handlers and self._handlers[eventName]) ~= nil
+end
+
+---Ask `loom.run` to redraw soon, after changing widgets outside an event (from a timer, say).
+function Widget:invalidate() run.request(0) end
+
+---Place and size this widget relative to its parent on every draw. Fields, in cells or as "N%" of the
+---parent's inner size: `left`, `right`, `top`, `bottom`, `width`, `height`; and `center` = true, "x"
+---or "y". `left` and `right` together set the width; one of them pins that edge. `false` removes it.
+---```lua
+---list:layout{left = 1, right = 1, top = 3, bottom = 2} -- fill the parent, with margins
+---button:layout{right = 1, bottom = 0, width = 10}    -- bottom-right corner
+---panel:layout{width = "50%", height = "50%", center = true}
+---```
+---@param spec? table|false
+---@return table|false
+function Widget:layout(spec)
+    checkArg(1, spec, 'table', 'boolean', 'nil')
+    local old = self._layout or false
+    if spec == false then
+        self._layout = nil
+    elseif spec then
+        local parsed = {}
+        for key, value in pairs(spec) do
+            if type(value) == "string" and value:sub(-1) == "%" then
+                value = {tonumber(value:sub(1, -2)) / 100}
+            end
+            parsed[key] = value
+        end
+        self._layout = parsed
+    end
+    return old
+end
+
+local function cells(v, total)
+    if type(v) == "table" then return math.floor(v[1] * total + 0.5) end
+    return v
+end
+
+-- One axis of a layout: returns the new position and size, or nil to leave the position.
+local function axis(lo, hi, size, total, center, current)
+    lo, hi, size = cells(lo, total), cells(hi, total), cells(size, total)
+    if lo and hi then return lo + 1, math.max(0, total - lo - hi) end
+    size = size or current
+    if lo then return lo + 1, size end
+    if hi then return total - hi - size + 1, size end
+    if center then return (total - size) // 2 + 1, size end
+    return nil, size
+end
+
+---Apply the layout inside a `width` x `height` area (the parent's size).
+---@package
+function Widget:_applyLayout(width, height, inset)
+    local l = self._layout
+    local c = l.center
+    local x, w = axis(l.left, l.right, l.width, width - 2 * inset, c == true or c == "x", self:width())
+    local y, h = axis(l.top, l.bottom, l.height, height - 2 * inset, c == true or c == "y", self:height())
+    if x then self:x(x + inset) end
+    if y then self:y(y + inset) end
+    self:size(w, h)
 end
 
 ---Check if the x,y coordinates match the Widget
@@ -471,75 +578,93 @@ function Widget:_gpufill(x, y, width, height, char, isBoundingBox) --needs work
     -- return
 end
 
+---Show a draw error: a red box over the widget with the first line of the message.
+---@package
+function Widget:_drawError(message)
+    local x, y, width, height = self:absX(), self:absY(), self:width(), self:height()
+    local bg, fg = gpu.setBackground(0xcc0000), gpu.setForeground(0xffffff)
+    self:_gpufill(x, y, width, height, " ")
+    local text = tostring(message):match("^[^\n]*"):gsub("^/[^:]*/", "")
+    for row = 0, height - 1 do
+        local part = unicode.sub(text, row * width + 1, (row + 1) * width)
+        if part == "" then break end
+        self:_gpuset(x, y + row, part)
+    end
+    gpu.setBackground(bg)
+    gpu.setForeground(fg)
+end
+
 ---Draw the widgets in the container
 function Widget:draw()
     if (not self:visible()) then return end
     return true
 end
 
---size tween (linear)
-function Widget:tweenSize(width, height, speed)
-    checkArg(1, width, 'number', 'nil')
-    checkArg(2, height, 'number', 'nil')
-    checkArg(3, speed, 'number', 'nil')
-    local goalWidth, goalHeight
-    if self._tweenSize then
-        goalWidth, goalHeight = self._tweenSize.goal.width, self._tweenSize.goal.height
-    end
-    if width and height then
-        self._tweenSize = {speed = math.max(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {width = width, height = height}, original = {width = self:width(), height = self:height()}}
-    end
-    return goalWidth, goalHeight
+---Animate properties towards `to` over `seconds`: position, size, colours, or any numeric
+---property the widget has (a ProgressBar's `value`, say). See loom/animation.lua for options:
+---`easing`, `delay`, `repeats`, `yoyo`, `onDone`. Returns the animation (`:cancel()`, `:finish()`).
+---```lua
+---panel:animate({x = 10, backgroundColor = 0x003366}, 0.4, {easing = "outBack"})
+---```
+---@param to table
+---@param seconds? number
+---@param options? table
+---@return Animation
+function Widget:animate(to, seconds, options)
+    checkArg(1, to, 'table')
+    checkArg(2, seconds, 'number', 'nil')
+    checkArg(3, options, 'table', 'nil')
+    return require("loom.animation").start(self, to, seconds, options)
 end
 
---position tween (linear)
-function Widget:tweenPosition(x, y, speed) --allow cancellation
+---Stop every animation on this widget, leaving it where it is (or at the end, if `finish`).
+---@param finish? boolean
+function Widget:stopAnimations(finish)
+    local list = {table.unpack(self._anims or {})}
+    for _, a in ipairs(list) do
+        if finish then a:finish() else a:cancel() end
+    end
+    self._anims = nil
+end
+
+---Move to x, y over `seconds` (default 0.5). With no arguments, return the target while moving.
+---@param x? number
+---@param y? number
+---@param seconds? number
+---@param options? table
+---@return number? x,number? y
+function Widget:moveTo(x, y, seconds, options)
     checkArg(1, x, 'number', 'nil')
     checkArg(2, y, 'number', 'nil')
-    checkArg(3, speed, 'number', 'nil')
-    local goalX, goalY
-    if self._tweenPos then
-        goalX, goalY = self._tweenPos.goal.x, self._tweenPos.goal.y
-    end
-    if x and y then
-        self._tweenPos = {speed = math.max(10, math.max(math.floor(speed or 1), 1)), step = 1, goal = {x = x, y = y}, original = {x = self:x(), y = self:y()}} --maybe need to round if they are decimals
-    end
-    return goalX, goalY
+    local animation = self._anims and require("loom.animation")
+    local oldX, oldY = animation and animation.target(self, "x"), animation and animation.target(self, "y")
+    if x and y then self:animate({x = x, y = y}, seconds, options) end
+    return oldX, oldY
 end
 
-function Widget:_tweenStep()
-    if not self:enabled() or not self:visible() then return end
-    --could add looping and total iterations, the ability to replay and the ability to pause
-    --could also add bezier lerps
-    if self._tweenPos then
-        local ox, oy = self._tweenPos.original.x, self._tweenPos.original.y
-        local nx, ny = self._tweenPos.goal.x, self._tweenPos.goal.y --new
-        local targetStep = self._tweenPos.speed
-        if self._tweenPos.step > targetStep then --could check if its equal
-            self._tweenPos = nil
-            --could push a psuedo tweenPosFinished event here
-        else
-            local t = self._tweenPos.step / targetStep
-            self:position(math.floor(ox + (nx - ox) * t + 0.5), math.floor(oy + (ny - oy) * t + 0.5 ) )
-            self._tweenPos.step = self._tweenPos.step + 1
-        end
-    end
-    if self._tweenSize then
-        local owidth, oheight = self._tweenSize.original.width, self._tweenSize.original.height
-        local nwidth, nheight = self._tweenSize.goal.width, self._tweenSize.goal.height
-    
-        local targetStep = self._tweenSize.speed
-        if self._tweenSize.step > targetStep then
-            self._tweenSize = nil
-            --self:size(nwidth, nheight) -- Set the final size to ensure accuracy, might not be necessary
-            --could push a psuedo tweenSizeFinished event here
-        else
-            local t = self._tweenSize.step / targetStep
-            self:size(math.floor(owidth + (nwidth - owidth) * t + 0.5), math.floor(oheight + (nheight - oheight) * t + 0.5))
+---Resize to width, height over `seconds` (default 0.5). With no arguments, return the target while resizing.
+---@param width? number
+---@param height? number
+---@param seconds? number
+---@param options? table
+---@return number? width,number? height
+function Widget:resizeTo(width, height, seconds, options)
+    checkArg(1, width, 'number', 'nil')
+    checkArg(2, height, 'number', 'nil')
+    local animation = self._anims and require("loom.animation")
+    local oldW, oldH = animation and animation.target(self, "width"), animation and animation.target(self, "height")
+    if width and height then self:animate({width = width, height = height}, seconds, options) end
+    return oldW, oldH
+end
 
-            self._tweenSize.step = self._tweenSize.step + 1
-        end
-    end
+---Old names: `speed` was a number of draws (at least 10); now a draw is taken as 1/20 s.
+function Widget:tweenPosition(x, y, speed) return self:moveTo(x, y, speed and math.max(10, speed) / 20) end
+function Widget:tweenSize(width, height, speed) return self:resizeTo(width, height, speed and math.max(10, speed) / 20) end
+
+---Advance this widget's animations; called by the parent frame before each draw.
+---@package
+function Widget:_animate()
+    if self._anims and self:enabled() and self:visible() then require("loom.animation").step(self) end
 end
 
 --todo: add weldAlignment (changes where the weld is applied, for now its top left corner)
@@ -600,8 +725,7 @@ end
 function Widget:reset()
     self:closeListeners()
     self:breakWelds()
-    self._tweenPos = nil
-    self._tweenSize = nil
+    self._anims = nil
 end
 
 function Widget:Destroy(force) --unparent and then .. ? 

@@ -10,6 +10,30 @@ A widget-based GUI library for OpenComputers. It started as YAWL-E, an enhanced 
 - `oppm -f install loom`
 
 Once installed, Loom can be used with `require("loom")` in your programs. `require("yawl-e")` still works for now and returns Loom.
+
+```lua
+local loom = require("loom")
+local gui = loom.widget
+local root = gui.Frame()
+root:backgroundColor(0x000000)
+local name = gui.TextInput(root, 1, 1, "")
+name:layout{left = 2, right = 2, top = 1, height = 1} -- stays 2 cells from each side as the screen resizes
+name:placeholder("your name")
+name:on("submit", function(self, text) loom.stop() end)
+local quit = gui.TextButton(root, 1, 1, 8, 1, "[ QUIT ]", 0xffffff)
+quit:layout{right = 1, bottom = 0}
+quit:on("touch", function() loom.stop() end)
+loom.run(root) -- redraws after events and animations only; returns after loom.stop()
+root:Destroy()
+```
+
+- `loom.run(root, interval)` draws when something may have changed: after each signal, while a widget animates, and at least every `interval` seconds (default 0.5). Call `loom.invalidate()` after changing widgets from a timer to redraw at once.
+- `widget:on(event, handler)` / `widget:off(event, handler)`: handlers get `(self, ...)` with the event data, for screen events `(self, screen, x, y, button, player)`. Return true to stop the event there. `callback` still works.
+- `widget:layout{left, right, top, bottom, width, height, center}` places a widget relative to its parent on each draw; values are cells or `"N%"`. `UIGrid` lays its children out in columns.
+- `widget:animate(to, seconds, options)` animates any numeric property, colours included, e.g. `panel:animate({x = 10, backgroundColor = 0x003366}, 0.4, {easing = "outBack"})`. Options: `easing` (linear, in/out/inOut Quad and Cubic, outBack, outElastic, in/outBounce, or a function), `delay`, `repeats` (`true` = forever), `yoyo`, `onDone`. It returns a handle with `:cancel()` and `:finish()`; the widget gets an `"animationDone"` event. `moveTo(x, y, seconds)` and `resizeTo(width, height, seconds)` are shortcuts (`tweenPosition`/`tweenSize` still work).
+- A widget whose draw errors shows as a red box with the message, and the error goes to `/tmp/loom.log`; errors in event handlers are logged too. `loom.onError(function(widget, message, during) end)` handles them yourself (return true to skip the red box).
+- `TextInput` has focus with Tab/Shift+Tab, Enter to submit, word jumps, paste, placeholder, masking and length limits; see [docs/TextInput.md](loom/docs/TextInput.md).
+- Tests run on Ocelot Harness: `powershell loom/test/run.ps1`.
 Here's an example of Loom in action in another project of mine.
 
 ![java_L73glKpY8l-ezgif com-video-to-gif-converter](https://github.com/Renno231/Renno-Programs/assets/75190549/d81f54f3-d4f1-42af-aa90-b245ecd3b330)

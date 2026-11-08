@@ -1,5 +1,6 @@
 local checkArg = require("loom.util").checkArg
 local gpu = require("loom.gpu")
+local run = require("loom.run")
 local class = require("loom.class")
 local Widget = require("loom.widget.Widget")
 
@@ -114,6 +115,7 @@ function ToggleSwitch:draw()
     self:_gpufill(x + boundary, y, self._slider.width, self._slider.height, " ")
     if boundary ~= sliderX then
         self._slider.x = boundary
+        run.request(0.05) -- still sliding
     end
     local activeBG = self:activeBackgroundColor()
     if activeBG and boundary - 1 > 0 then
