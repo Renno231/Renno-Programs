@@ -127,7 +127,7 @@ function Frame:propagateEvent(eName, screenAddress, x, y, ...)
     
     for i = #(self._childs), 1, -1 do
         local w = self._childs[i]
-        if (w:checkCollision(x, y)) then
+        if w:visible() and w:checkCollision(x, y) then -- hidden widgets don't take signals
             local cSuccess 
             if (w:instanceOf(Frame)) then
                 ---@cast w Frame

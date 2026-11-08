@@ -78,7 +78,9 @@ end
 ---@return number ms,number fills
 function Shader:stats() return self._ms or 0, self._fills or 0 end
 
--- Ordered (Bayer 4x4) dithering to OpenComputers' 8-bit palette: 6 reds, 8 greens, 5 blues.
+-- Ordered (Bayer 4x4) dithering to OpenComputers' 8-bit palette: a 6x8x5 colour cube (6 reds,
+-- 8 greens, 5 blues) plus 16 greys, 0x0f0f0f to 0xf0f0f0. The cube has no greys between black and
+-- white, so a colour nearer a palette grey than the cube snaps to the greys.
 local bayer = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5}
 local function levels(n)
     local t = {}
@@ -86,12 +88,24 @@ local function levels(n)
     return t
 end
 local R, G, B = levels(6), levels(8), levels(5)
+local function clamp(v, top) return math.max(0, math.min(top, v)) end
 local function quantize(color, x, y, dither)
     local d = dither and bayer[(y % 4) * 4 + x % 4 + 1] / 16 - 0.46875 or 0 -- about -0.47 .. 0.47
-    local r = math.max(0, math.min(5, math.floor(((color >> 16) & 0xff) * 5 / 255 + d + 0.5)))
-    local g = math.max(0, math.min(7, math.floor(((color >> 8) & 0xff) * 7 / 255 + d + 0.5)))
-    local b = math.max(0, math.min(4, math.floor((color & 0xff) * 4 / 255 + d + 0.5)))
-    return (R[r] << 16) | (G[g] << 8) | B[b]
+    local r, g, b = (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff
+    -- nearest cube colour and nearest grey (undithered), to pick which the pixel belongs to
+    local cr, cg, cb = R[math.floor(r * 5 / 255 + 0.5)], G[math.floor(g * 7 / 255 + 0.5)], B[math.floor(b * 4 / 255 + 0.5)]
+    local level = (r + g + b) / 3
+    local grey = clamp(math.floor(level / 15 + 0.5), 16) * 15 -- 0 and 255 (black, white) are in the cube
+    if grey == 240 and level > 247.5 then grey = 255 end
+    local cubeDist = (r - cr) ^ 2 + (g - cg) ^ 2 + (b - cb) ^ 2
+    local greyDist = (r - grey) ^ 2 + (g - grey) ^ 2 + (b - grey) ^ 2
+    if greyDist < cubeDist then
+        local i = clamp(math.floor(level / 15 + 0.5 + d), 17)
+        local v = i == 17 and 255 or i * 15
+        return (v << 16) | (v << 8) | v
+    end
+    return (R[clamp(math.floor(r * 5 / 255 + d + 0.5), 5)] << 16) | (G[clamp(math.floor(g * 7 / 255 + d + 0.5), 7)] << 8)
+        | B[clamp(math.floor(b * 4 / 255 + d + 0.5), 4)]
 end
 
 ---Work out the picture as runs: {top, bottom, x, y, length, ...} relative to the widget.

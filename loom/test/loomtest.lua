@@ -479,6 +479,41 @@ do
     input.detach()
 end
 
+-- Touch skips hidden frames stacked over the shown one ------------------------------------------
+do
+    local root = scene()
+    local shown, hidden = gui.Frame(root, 1, 1), gui.Frame(root, 1, 1)
+    shown:size(20, 10) hidden:size(20, 10)
+    hidden:visible(false)
+    local hits = 0
+    gui.Button(shown, 2, 2, 6, 2, 0x333366):callback(function(_, _, eventName) if eventName == "touch" then hits = hits + 1 end end)
+    root:draw()
+    touch(3, 3)
+    eq("a touch reaches the shown frame under a hidden one", hits, 1)
+    root:Destroy()
+end
+
+-- Shader: greys stay grey on 8-bit screens (the palette's 16 greys, not the colour cube) ----------
+do
+    local root = scene()
+    local greys = {0x5a5a5a, 0xb4b4b4, 0x2a2a2a, 0x808080}
+    local s = gui.Shader(root, 2, 2, 4, 1, function(x) return greys[x] end)
+    s:dither(false)
+    root:draw()
+    local out = {}
+    for x = 1, 4 do
+        local _, _, bg = proxy.get(1 + x, 2)
+        out[#out + 1] = ((bg >> 16) == ((bg >> 8) & 0xff) and (bg >> 16) == (bg & 0xff)) and "grey" or ("%06x"):format(bg)
+    end
+    eq("8-bit screen", proxy.getDepth(), 8)
+    eq("greys stay grey", table.concat(out, ","), "grey,grey,grey,grey")
+    local d = gui.Shader(root, 2, 4, 8, 2, function() return 0x5a5a5a end) -- dithered too
+    root:draw()
+    local _, _, bg = proxy.get(3, 4)
+    check("dithered grey stays grey", (bg >> 16) == (bg & 0xff), ("%06x"):format(bg))
+    root:Destroy()
+end
+
 -- Shader: half-block pixels, merged runs, unpainted pixels ---------------------------------------
 do
     local root = scene()
