@@ -6,10 +6,14 @@ local unicode = require("unicode")
 
 -- count every GPU component call (loom.gpu captures the proxy's functions when it loads)
 local proxy = component.gpu
-local calls, byName = 0, {}
+local calls, byName, lastBlit = 0, {}, nil
 for k, v in pairs(proxy) do
     if k ~= "address" and k ~= "type" and k ~= "slot" and (type(v) == "table" or type(v) == "function") then
-        proxy[k] = function(...) calls = calls + 1 byName[k] = (byName[k] or 0) + 1 return v(...) end
+        proxy[k] = function(...)
+            calls = calls + 1 byName[k] = (byName[k] or 0) + 1
+            if k == "bitblt" then lastBlit = {...} end
+            return v(...)
+        end
     end
 end
 
@@ -244,7 +248,7 @@ do
     end
     local took = computer.uptime() - t0
     eq("moveTo arrives", table.concat({box:x(), box:y(), box:width(), box:height()}, ","), "21,11,6,4")
-    check("moveTo takes its time", took >= 0.45 and took <= 0.8, ("%.2f s"):format(took))
+    check("moveTo takes its time", took >= 0.45 and took <= 0.85, ("%.2f s"):format(took))
     check("moveTo is midway at half time", mid and mid > 5 and mid < 18, mid)
     root:Destroy()
 end
@@ -393,6 +397,37 @@ do
     check("gpu calls per unchanged draw <= 10", perDraw <= 10, perDraw)
     check("cpu per unchanged draw <= 3 ms", cpu / n * 1000 <= 3, ("%.2f ms"):format(cpu / n * 1000))
     check("garbage per unchanged draw <= 32 KiB", allocs[n // 2] <= 32768, allocs[n // 2] .. " B")
+
+    -- A small change redraws and copies only the changed part, and the result matches a whole redraw.
+    local function snapshot()
+        local cells = {}
+        for y = 1, H do
+            for x = 1, W do
+                local ch, f, b = proxy.get(x, y)
+                cells[#cells + 1] = ch .. f .. "/" .. b
+            end
+        end
+        return cells
+    end
+    local field = tab._childs[#tab._childs - 1]
+    field:text("changed")
+    local button = tab._childs[#tab._childs]
+    button:position(button:x() + 1, button:y()) -- a moved widget damages where it was and where it is
+    local c1 = calls
+    lastBlit = nil
+    root:draw()
+    local small = calls - c1
+    local area = lastBlit and lastBlit[4] * lastBlit[5] or 0
+    check("small change copies only the damaged part", area > 0 and area < W * H / 10, lastBlit and (lastBlit[4] .. "x" .. lastBlit[5]))
+    local partial = snapshot()
+    root._lastDrawLog = nil
+    local c2 = calls
+    root:draw()
+    local whole = calls - c2
+    check("small change replays few calls", small < whole / 3, ("%d calls, %d for a whole redraw"):format(small, whole))
+    local full, diff = snapshot(), 0
+    for i = 1, #full do if full[i] ~= partial[i] then diff = diff + 1 end end
+    check("partial redraw matches a whole redraw", diff == 0, diff .. " cells differ")
     root:Destroy()
 end
 

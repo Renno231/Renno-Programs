@@ -210,7 +210,7 @@ function Frame:_initBuffer()
     if not buffer then
         buffer = gpu.allocateBuffer(rwidth, rheight)
         self._buffer = buffer
-        self._lastDrawCount = nil -- a new buffer always goes to the screen
+        self._lastDrawLog = nil -- a new buffer is drawn whole
     end
     local screenBuffer = gpu.getActiveBuffer()
     if buffer then
@@ -224,16 +224,20 @@ function Frame:_initBuffer()
     return screenBuffer, buffer
 end
 
----Finish drawing a root frame: copy its buffer to the screen if the frame changed.
+---Finish drawing a root frame: copy what changed in its buffer to the screen.
 ---@param screenBuffer? number
 ---@param buffer? number
 function Frame:_restoreBuffer(screenBuffer, buffer)
     if not screenBuffer then return end
-    local changed = gpu.finish(self)
+    local changed, x1, y1, x2, y2 = gpu.finish(self)
     if buffer then
         if changed then
             local x, y = self:absX(), self:absY()
-            gpu.bitblt(screenBuffer, x, y, self:width(), self:height(), buffer, bitBltFix and y or x, bitBltFix and x or y)
+            local r, b = x + self:width() - 1, y + self:height() - 1
+            if x1 then x, y, r, b = math.max(x, x1), math.max(y, y1), math.min(r, x2), math.min(b, y2) end
+            if x <= r and y <= b then
+                gpu.bitblt(screenBuffer, x, y, r - x + 1, b - y + 1, buffer, bitBltFix and y or x, bitBltFix and x or y)
+            end
         end
         gpu.setActiveBuffer(screenBuffer)
     end
