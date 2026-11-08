@@ -2,16 +2,15 @@
 This repository houses programs made by Renno231 for OPPM (OpenPrograms Package Manager).
 
 # Projects
-## yawl-e
-Yet Another Widget Library (Enhanced). An enhanced fork of YAWL, a Widget-based GUI library made by AR2000 that takes advantage of GPU VRAM buffering added in OpenComputers 1.7.6 for more advanced GUIs.
-<br><br> To install and use yawl-e follow these instructions:
-- install [oppm](https://ocdoc.cil.li/tutorial:program:oppm) and run the following commands (you can also copy and paste them into the terminal with the insert key)
-- `oppm register AR2000AR/openComputers_codes`
+## Loom
+A widget-based GUI library for OpenComputers. It started as YAWL-E, an enhanced fork of AR2000's YAWL, and draws every widget into one GPU VRAM buffer (OpenComputers 1.7.6+) that reaches the screen only when the frame changes.
+<br><br> To install and use Loom follow these instructions:
+- install [oppm](https://ocdoc.cil.li/tutorial:program:oppm) and run the following command (you can also copy and paste it into the terminal with the insert key)
 - `oppm register Renno231/Renno-Programs`
-- `oppm -f install yawl-e`
+- `oppm -f install loom`
 
-Once installed, yawl-e can be used with `require("yawl-e")` in your programs.
-Here's an example of yawl-e in action in another project of mine.
+Once installed, Loom can be used with `require("loom")` in your programs. `require("yawl-e")` still works for now and returns Loom.
+Here's an example of Loom in action in another project of mine.
 
 ![java_L73glKpY8l-ezgif com-video-to-gif-converter](https://github.com/Renno231/Renno-Programs/assets/75190549/d81f54f3-d4f1-42af-aa90-b245ecd3b330)
 
