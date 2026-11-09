@@ -278,6 +278,14 @@ function Frame:_sort()
 end
 
 ---Draw the widgets in the container
+-- Whether any of `element` shows inside the part of `frame` that is on screen.
+local function inView(frame, element)
+    local fx, fy, fw, fh = frame:_drawnBounds()
+    if not fx then fx, fy, fw, fh = frame:absX(), frame:absY(), frame:width(), frame:height() end
+    local x, y, w, h = element:absX(), element:absY(), element:width(), element:height()
+    return w > 0 and h > 0 and x < fx + fw and x + w > fx and y < fy + fh and y + h > fy
+end
+
 function Frame:draw()
     if self._layout and not self:getParent() then -- a root frame lays out against the screen
         local vw, vh = gpu.getViewport()
@@ -331,7 +339,7 @@ function Frame:draw()
         if noDrawError and drawReturn==true and element.drawBorder and not element._borderoverride then 
             element:drawBorder() 
         end
-        if noDrawError and element:focusable() and element:visible() and element:width() > 0 and element:height() > 0 then
+        if noDrawError and element:focusable() and element:visible() and inView(self, element) then
             input.shown(element)
             if input.focused() == element then focusedChild = element end
         end

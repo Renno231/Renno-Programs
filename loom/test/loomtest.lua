@@ -479,6 +479,37 @@ do
     input.detach()
 end
 
+-- Focus and brackets follow what is visible: a page slid out of its panel loses both -----------
+do
+    input.attach()
+    local root = scene()
+    local panel = gui.Frame(root, 20, 2) panel:size(20, 10) panel:backgroundColor(0x202040)
+    local page = gui.Frame(panel, 2, 2) page:size(18, 8) page:backgroundColor(0x202040)
+    local button = gui.Button(page, 3, 2, 6, 1, 0x333366)
+    local presses = 0
+    button:callback(function(_, _, e) if e == "touch" then presses = presses + 1 end end)
+    root:draw()
+    button:focus() root:draw()
+    local function marks()
+        local found = {}
+        for y = 1, 25 do for x = 1, 80 do
+            local c = proxy.get(x, y)
+            if c == "[" or c == "]" then found[#found + 1] = x .. "," .. y end
+        end end
+        return table.concat(found, " ")
+    end
+    eq("brackets beside the focused button", marks(), "22,4 29,4")
+    page:x(-4) root:draw() -- part way out: the left bracket would sit outside the panel
+    eq("brackets stay inside the panel", marks(), "23,4")
+    page:x(-30) root:draw() root:draw() -- all the way out
+    eq("no brackets once the page is out of view", marks(), "")
+    key(13, 28)
+    eq("an out-of-view button does not take Enter", presses, 0)
+    check("and loses focus", not button:focused())
+    root:Destroy()
+    input.detach()
+end
+
 -- Touch skips hidden frames stacked over the shown one ------------------------------------------
 do
     local root = scene()

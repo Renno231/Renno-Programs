@@ -620,8 +620,9 @@ function Widget:_gpufill(x, y, width, height, char, isBoundingBox) --needs work
                 px, py, pwidth, pheight = pdx, pdy, pdwidth, pdheight
             end
         end
-        if pwidth == 0 or pheight == 0 or x>px+pwidth or y>py+pheight then 
-            return 
+        if pwidth <= 0 or pheight <= 0 or x >= px + pwidth or y >= py + pheight or x + width <= px or y + height <= py then
+            if isBoundingBox and self._drawnBounds then self:_drawnBounds(x, y, 0, 0) end -- nothing of it shows
+            return
         end
         if x<px then --off to the left
             width = width + (x-px)
