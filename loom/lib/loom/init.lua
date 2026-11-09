@@ -20,6 +20,8 @@ local loom = {
     onError = run.onError,
     ---Handle keys no widget used: `loom.onKey(function(char, code, player) end)`. See loom/input.lua.
     onKey = require('loom.input').onKey,
+    ---How long the focus brackets take to slide to a newly focused widget (default 0.2 s; 0 jumps).
+    focusGlide = require('loom.input').glide,
     ---The widget with keyboard focus, or nil.
     focused = require('loom.input').focused,
 }

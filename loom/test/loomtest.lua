@@ -368,6 +368,7 @@ end
 -- Keyboard navigation: arrows, Enter/Space as touch, outline, per-widget keys, onKey ----------
 do
     input.attach()
+    local oldGlide = loom.focusGlide(0) -- these checks read the brackets right after focus moves
     local root = scene()
     local touches = {}
     local function counted(name)
@@ -476,6 +477,24 @@ do
 
     root:Destroy()
     check("destroying the focused widget clears focus", input.focused() == nil)
+    loom.focusGlide(oldGlide)
+    input.detach()
+end
+
+-- The focus brackets slide over to a newly focused widget -------------------------------------
+do
+    input.attach()
+    local root = scene()
+    local a = gui.Button(root, 3, 3, 6, 1, 0x333366)
+    local b = gui.Button(root, 30, 3, 6, 1, 0x333366)
+    local function left() for x = 1, 80 do if proxy.get(x, 3) == "[" then return x end end end
+    a:focus() root:draw()
+    eq("first focus appears in place", left(), 2)
+    b:focus() root:draw()
+    check("then slides: not there yet", left() < 29, tostring(left()))
+    os.sleep(0.3) root:draw()
+    eq("and arrives", left(), 29)
+    root:Destroy()
     input.detach()
 end
 

@@ -440,12 +440,13 @@ function Widget:_key(char, code, ctrl, player) return false end
 
 ---Draw the focus marker: white brackets just outside the widget, on its parent's background, so
 ---the widget keeps its look. `[` `]` beside a one-row widget, `┌│└` `┐│┘` beside a taller one.
+---When focus moves, the brackets slide over from the last widget (see `loom.focusGlide`).
 ---Frame calls this after drawing its children, so siblings don't cover it.
 ---@protected
 function Widget:_drawFocus()
-    local x, y, w, h = self:absX(), self:absY(), self:width(), self:height()
     local parent = self:getParent()
-    if w < 1 or h < 1 or not parent then return end
+    if self:width() < 1 or self:height() < 1 or not parent then return end
+    local x, y, w, h = input.markerBox(self, self:absX(), self:absY(), self:width(), self:height())
     local px, py, pw, ph = parent:absX(), parent:absY(), parent:width(), parent:height()
     if parent._drawnBounds then
         local dx, dy, dw, dh = parent:_drawnBounds()

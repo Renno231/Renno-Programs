@@ -9,6 +9,7 @@
 --   anything else     the `onKey` handler, if set (screen shortcuts, quit keys)
 -- While `loom.run` runs, keys are always listened for; otherwise only while a widget has focus.
 -- A touch on a focusable widget focuses it; a touch elsewhere clears focus.
+local computer = require("computer")
 local event = require("event")
 local keyboard = require("keyboard")
 local gpu = require("loom.gpu")
@@ -23,6 +24,7 @@ local counter, counterFrame = 0, nil
 local TAB, ESCAPE, ENTER, KEYPAD_ENTER, SPACE = 15, 1, 28, 156, 57
 local MOVES = {[200] = {0, -1}, [208] = {0, 1}, [203] = {-1, 0}, [205] = {1, 0}}
 local hookOwner = {Class = "onKey"} -- errors in the key handler are reported against this
+local glideTime, glide = 0.2, {}
 
 ---Note that `widget` was drawn this frame and can take focus.
 function input.shown(widget)
@@ -97,6 +99,33 @@ function input.move(dx, dy)
     end
     if best then input.focus(best, focused._player) return true end
     return false
+end
+
+---Set how long the focus marker takes to slide to a newly focused widget (default 0.2 s; 0 jumps).
+---Returns the old time.
+---@param seconds? number
+---@return number
+function input.glide(seconds)
+    local old = glideTime
+    if seconds then glideTime = seconds end
+    return old
+end
+
+---Where to draw `widget`'s focus marker: its own box, or on the way there from the last widget's.
+---@package
+function input.markerBox(widget, x, y, w, h)
+    local now = computer.uptime()
+    if glide.widget ~= widget then glide.widget, glide.from, glide.at = widget, glide.box, now end
+    local from = glide.from
+    local k = from and glideTime > 0 and math.min(1, (now - glide.at) / glideTime) or 1
+    if k < 1 then
+        k = 1 - (1 - k) ^ 3 -- fast, then easing in
+        local function at(a, b) return math.floor(a + (b - a) * k + 0.5) end
+        x, y, w, h = at(from[1], x), at(from[2], y), at(from[3], w), at(from[4], h)
+        run.request(0)
+    end
+    glide.box = {x, y, w, h}
+    return x, y, w, h
 end
 
 ---Do what a touch on `widget` does (at its top-left cell).
@@ -198,6 +227,7 @@ function input.focus(widget, player)
         widget:invokeCallback("focus")
         listen()
     else
+        glide.widget, glide.box = nil, nil -- the next focus appears in place
         unlisten()
     end
     run.request(0)

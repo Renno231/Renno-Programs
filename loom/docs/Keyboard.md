@@ -32,6 +32,10 @@ keeps its look: `[` and `]` beside a one-row widget, `┌│└` and `┐│┘`
 SortedList also shows its cursor row in a lighter colour with a white `▌`. Widgets inside a
 disabled frame can't take focus (a dialog can disable the frame behind it).
 
+When focus moves, the brackets slide over from the last widget in 0.2 s;
+`loom.focusGlide(seconds)` changes that (0 jumps). Only widgets with some part in view can take or
+keep focus: a page slid out of its panel loses it.
+
 ## API
 
 ```lua
@@ -40,6 +44,7 @@ widget:blur()
 widget:focused()          -- true if it has focus
 widget:focusable(value)   -- get/set whether it can take focus
 loom.focused()            -- the focused widget, or nil
+loom.focusGlide(seconds)  -- how long the brackets slide between widgets; returns the old time
 loom.onKey(function(char, code, player) ... end) -- keys no widget used; returns the old handler
 ```
 
