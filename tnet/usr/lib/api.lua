@@ -22,7 +22,8 @@ local RPC_TYPE_PING = "rpc_ping"
 local Endpoint = {}
 Endpoint.__index = Endpoint
 -- modem: the address of the only card that hears this endpoint; the primary card when omitted.
-function api.expose(name, target, port, keys, modem)
+-- bucket (tnet.bucket): holds the endpoint, its listener and its connections.
+function api.expose(name, target, port, keys, modem, bucket)
     local lib = type(target) == "string" and require(target) or target
     
     if type(lib) ~= "table" then
@@ -46,12 +47,13 @@ function api.expose(name, target, port, keys, modem)
         if type(fnDef) == "function" then
             endpoint:exposeFunction(fnName, "Undocumented", keys and keys[fnName])
         elseif type(fnDef) == "table" and #fnDef >= 2 and type(fnDef[1]) == "function" and type(fnDef[2]) == "string" then
+            lib[fnName] = fnDef[1] -- unwrap first: exposeFunction checks lib[fnName] is a function
             endpoint:exposeFunction(fnName, fnDef[2], keys and keys[fnName])
-            lib[fnName] = fnDef[1]
         end
     end
     
-    local success, err = tnet.listen(port, function(conn)
+    local listen = bucket and function(...) return bucket:listen(...) end or tnet.listen
+    local success, err = listen(port, function(conn)
         conn.serial = {lib = "serialization", encode = "serialize", decode = "unserialize"}
         
         if endpoint.accessKey and conn.wake ~= endpoint.accessKey then
@@ -91,6 +93,7 @@ function api.expose(name, target, port, keys, modem)
     
     endpoint.listening = true
     api.endpoints[name] = endpoint
+    if bucket then bucket:add(endpoint) end
     
     return endpoint
 end
@@ -193,25 +196,55 @@ function Endpoint:shutdown()
     self.connections = {}
     
     api.endpoints[self.name] = nil
+    if self.bucket then self.bucket:remove(self) end
     return true
 end
+Endpoint.close = Endpoint.shutdown
 
 -- CLIENT SIDE
 local RemoteProxy = {}
 RemoteProxy.__index = RemoteProxy
 -- modem: the address of the card that reaches address; the primary card when omitted.
-function api.connect(endpointName, port, address, wakeKey, timeout, fnKeys, modem)
-    timeout = timeout or 5
-    
-    local conn = tnet.connect(address, port, wakeKey, "api_client", nil, nil, modem)
+-- bucket (tnet.bucket): holds the proxy and its connection.
+local newProxy
+
+local function open(address, port, wakeKey, modem, bucket)
+    local conn = bucket and bucket:connect(address, port, wakeKey, "api_client", nil, nil, modem)
+        or tnet.connect(address, port, wakeKey, "api_client", nil, nil, modem)
     conn.serial = {lib = "serialization", encode = "serialize", decode = "unserialize"}
-    
+    return conn
+end
+
+-- A timeout of 0 sends the request and returns at once: the connection goes live
+-- when the peer answers, and getConnection():request() asks again.
+function api.connect(endpointName, port, address, wakeKey, timeout, fnKeys, modem, bucket)
+    timeout = timeout or 5
+    local conn = open(address, port, wakeKey, modem, bucket)
     local success, err = conn:init(timeout)
-    if not success then
+    if not success and timeout > 0 then
         conn:close(true)
         error("Failed to connect to " .. address .. ":" .. port .. " - " .. (err or "timeout"))
     end
-    
+    return newProxy(conn, endpointName, port, address, timeout, fnKeys, bucket)
+end
+
+-- api.connect without waiting: returns at once and later calls callback(proxy), or
+-- callback(nil, reason) when the endpoint does not answer within timeout seconds. Pair it with
+-- proxy:async(callback).fn(...) so a program with a UI never waits on the network.
+function api.connectAsync(endpointName, port, address, callback, wakeKey, timeout, fnKeys, modem, bucket)
+    timeout = timeout or 5
+    local conn = open(address, port, wakeKey, modem, bucket)
+    conn:init(timeout, function(success, err)
+        if not success then
+            conn:close(true)
+            callback(nil, "Failed to connect to " .. address .. ":" .. port .. " - " .. (err or "timeout"))
+            return
+        end
+        callback(newProxy(conn, endpointName, port, address, timeout, fnKeys, bucket))
+    end)
+end
+
+function newProxy(conn, endpointName, port, address, timeout, fnKeys, bucket)
     local proxy = setmetatable({
         conn = conn,
         endpoint = endpointName,
@@ -243,6 +276,7 @@ function api.connect(endpointName, port, address, wakeKey, timeout, fnKeys, mode
     local clientKey = address .. ":" .. port .. "/" .. endpointName
     api.clients[clientKey] = proxy
     proxy:setFnKeyTable(fnKeys)
+    if bucket then bucket:add(proxy) end
     return proxy
 end
 
@@ -344,8 +378,12 @@ function RemoteProxy:callRemoteFunction(fnName, callKey, asyncCallback, ...)
     local call = {responseType = RPC_TYPE_RESPONSE, callback = isAsync and asyncCallback or nil}
     self.pending[callId] = call
     if isAsync then
-        -- Preserve the existing silent async timeout, but release its pending slot.
-        call.timer = require("event").timer(10, function() self.pending[callId] = nil end)
+        -- An unanswered call ends like a waiting one: callback(false, reason).
+        call.timer = require("event").timer(10, function()
+            if self.pending[callId] ~= call then return end
+            self.pending[callId] = nil
+            asyncCallback(false, "Timeout calling remote function: " .. fnName)
+        end)
     end
     
     local args = table.pack(...)
@@ -389,7 +427,10 @@ function RemoteProxy:close()
     
     -- Remove from global registry
     local clientKey = self.address .. ":" .. self.port .. "/" .. self.endpoint
-    api.clients[clientKey] = nil
+    if api.clients[clientKey] == self then api.clients[clientKey] = nil end
+    -- rawget: any other key on a proxy names a remote function.
+    local bucket = rawget(self, "bucket")
+    if bucket then bucket:remove(self) end
     return true
 end
 
