@@ -1,5 +1,6 @@
 local checkArg = require("loom.util").checkArg
 local Frame = require("loom.widget.Frame")
+local Widget = require("loom.widget.Widget")
 
 ---A frame that places its children in a grid, left to right then top to bottom, and sizes each to
 ---its cell. Set `columns`; cells share the width unless `cellSize` fixes it, and are one row high
@@ -63,14 +64,14 @@ end
 function UIGrid:scrollX(num)
     checkArg(1, num, 'number', 'nil')
     local oldValue = self._scrollindexX or 0
-    if (num) then self._scrollindexX = num end
+    if (num) then self._scrollindexX = num Widget._moved() end
     return oldValue
 end
 
 function UIGrid:scrollY(num)
     checkArg(1, num, 'number', 'nil')
     local oldValue = self._scrollindexY or 0
-    if (num) then self._scrollindexY = num end
+    if (num) then self._scrollindexY = num Widget._moved() end
     return oldValue
 end
 

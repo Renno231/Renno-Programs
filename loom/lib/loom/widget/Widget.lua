@@ -22,6 +22,18 @@ local input = require("loom.input")
 function Widget:defaultCallback()
 end
 
+-- absX/absY walk the parent chain, and a draw asks for them for every GPU call. While a root
+-- frame draws, a widget keeps its answer until something moves: `moved` changes with every
+-- position, scroll or parent change (any widget's, as it may be a parent). Between draws nothing
+-- is kept, so a change made some other way still shows from the next draw.
+local moved, caching = 0, false
+---Note that a widget moved (scroll setters of frames call this).
+---@package
+function Widget._moved() moved = moved + 1 end
+---Keep absolute positions (during a root frame's draw) or not.
+---@package
+function Widget._cachePositions(on) moved, caching = moved + 1, on end
+
 ---@param parent Frame
 ---@param x number
 ---@param y number
@@ -59,6 +71,7 @@ function Widget:setParent(newparent, shouldClean) --kinda dangerous
         parent:removeChild(self) 
     end
     self._parentFrame = newparent
+    moved = moved + 1
     if newparent~=nil and shouldClean then
         newparent:addChild(self)
     end
@@ -91,19 +104,24 @@ function Widget:position(x, y)
     elseif (type(x) == 'table') then
         checkArg(2, y, 'nil')
         self._position = x
+        moved = moved + 1
     end
     return oldPosX, oldPosY
 end
+
+-- Getters skip checkArg: with no argument there is nothing to check, and they run per GPU call.
 
 ---Set the x position. Return the old x position or the current one if no x is provided
 ---@param x? number
 ---@return number
 function Widget:x(x)
+    if x == nil then return self._position.x end
     checkArg(1, x, 'number', 'nil')
     local oldX = self._position.x
     if (x) then
         self._position.x = x
         if oldX ~= x then
+            moved = moved + 1
             self:invokeCallback("xPosChanged", oldX, x)
         end
     end
@@ -114,11 +132,13 @@ end
 ---@param y? number
 ---@return number
 function Widget:y(y)
+    if y == nil then return self._position.y end
     checkArg(1, y, 'number', 'nil')
     local oldY = self._position.y
     if (y) then
         self._position.y = y
         if oldY ~= y then
+            moved = moved + 1
             self:invokeCallback("yPosChanged", oldY, y)
         end
     end
@@ -131,10 +151,24 @@ function Widget:absPosition()
     return self:absX(), self:absY()
 end
 
+-- Work out and keep both absolute coordinates (while caching).
+local function locate(self)
+    local x, y, parent = self:x(), self:y(), self._parentFrame
+    if parent then
+        x = parent:absX() + x - 1 - (parent.scrollX and math.floor(0.5 + parent:scrollX()) or 0)
+        y = parent:absY() + y - 1 - (parent.scrollY and math.floor(0.5 + parent:scrollY()) or 0)
+    end
+    self._absX, self._absY, self._absAt = x, y, moved
+end
+
 ---Get the absolute x position on screen.
 
 ---@return number
 function Widget:absX()
+    if caching then
+        if self._absAt ~= moved then locate(self) end
+        return self._absX
+    end
     if (self._parentFrame) then
         return self._parentFrame:absX() + self:x() - 1 - (self._parentFrame.scrollX and math.floor(0.5+ self._parentFrame:scrollX()) or 0) 
     else
@@ -145,6 +179,10 @@ end
 ---Get the absolute y position on screen.
 ---@return number
 function Widget:absY()
+    if caching then
+        if self._absAt ~= moved then locate(self) end
+        return self._absY
+    end
     if (self._parentFrame) then
         return self._parentFrame:absY() + self:y() - 1 - (self._parentFrame.scrollY and math.floor(0.5+ self._parentFrame:scrollY()) or 0) 
     else
@@ -156,6 +194,7 @@ end
 ---@param value? number
 ---@return number
 function Widget:z(value)
+    if value == nil then return self._z or 0 end
     checkArg(1, value, 'number', 'nil')
     local oldValue = self._z or 0
     if (value) then
@@ -171,6 +210,7 @@ end
 ---@param width? number
 ---@return number
 function Widget:width(width)
+    if width == nil then return self._size.width end
     checkArg(1, width, 'number', 'nil')
     local oldValue = self._size.width
     if (width) then
@@ -184,6 +224,7 @@ end
 ---@param height? number
 ---@return number
 function Widget:height(height)
+    if height == nil then return self._size.height end
     checkArg(1, height, 'number', 'nil')
     local oldValue = self._size.height
     if (height) then
@@ -212,6 +253,7 @@ end
 ---@param value? number|false
 ---@return number
 function Widget:backgroundColor(value)
+    if value == nil then return self._backgroundColor end
     checkArg(1, value, 'number', 'boolean', 'nil')
     local oldValue = self._backgroundColor
     if (value == false) then
@@ -225,6 +267,7 @@ end
 ---@param value? number
 ---@return number
 function Widget:foregroundColor(value)
+    if value == nil then return self._foregroundColor end
     checkArg(1, value, 'number', 'nil')
     local oldValue = self._foregroundColor
     if (value) then self._foregroundColor = value end
@@ -251,6 +294,7 @@ end
 ---@param value? string
 ---@return string
 function Widget:borderSet(value)
+    if value == nil then return self._borderSet end
     checkArg(1, value, 'string', 'nil')
     local oldValue = self._borderSet
     local setLen = value~=nil and unicode.len(value) or 0 
@@ -259,6 +303,7 @@ function Widget:borderSet(value)
 end
 
 function Widget:bordered(value)
+    if value == nil then return self._bordered end
     checkArg(1, value, 'boolean', 'nil')
     local oldValue = self._bordered
     if (value ~= nil) then self._bordered = value end

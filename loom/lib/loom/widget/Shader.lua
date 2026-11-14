@@ -19,6 +19,7 @@ local Widget = require("loom.widget.Widget")
 local Shader = require("loom.class")(Widget)
 
 local HALF = "▀"
+local floor = math.floor
 
 ---@param parent Frame
 ---@param x number
@@ -88,25 +89,38 @@ local function levels(n)
     return t
 end
 local R, G, B = levels(6), levels(8), levels(5)
-local function clamp(v, top) return math.max(0, math.min(top, v)) end
+-- Runs for every pixel of an animated shader, so no calls but floor: clamping is inline, squares
+-- are products (same values as max/min and ^ 2, which made floats).
 local function quantize(color, x, y, dither)
     local d = dither and bayer[(y % 4) * 4 + x % 4 + 1] / 16 - 0.46875 or 0 -- about -0.47 .. 0.47
     local r, g, b = (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff
     -- nearest cube colour and nearest grey (undithered), to pick which the pixel belongs to
-    local cr, cg, cb = R[math.floor(r * 5 / 255 + 0.5)], G[math.floor(g * 7 / 255 + 0.5)], B[math.floor(b * 4 / 255 + 0.5)]
+    local cr, cg, cb = R[floor(r * 5 / 255 + 0.5)], G[floor(g * 7 / 255 + 0.5)], B[floor(b * 4 / 255 + 0.5)]
     local level = (r + g + b) / 3
-    local grey = clamp(math.floor(level / 15 + 0.5), 16) * 15 -- 0 and 255 (black, white) are in the cube
+    local grey = floor(level / 15 + 0.5) -- 0 and 255 (black, white) are in the cube
+    if grey > 16 then grey = 16 end
+    grey = grey * 15
     if grey == 240 and level > 247.5 then grey = 255 end
-    local cubeDist = (r - cr) ^ 2 + (g - cg) ^ 2 + (b - cb) ^ 2
-    local greyDist = (r - grey) ^ 2 + (g - grey) ^ 2 + (b - grey) ^ 2
-    if greyDist < cubeDist then
-        local i = clamp(math.floor(level / 15 + 0.5 + d), 17)
+    local dr, dg, db = r - cr, g - cg, b - cb
+    local cubeDist = dr * dr + dg * dg + db * db
+    dr, dg, db = r - grey, g - grey, b - grey
+    if dr * dr + dg * dg + db * db < cubeDist then
+        local i = floor(level / 15 + 0.5 + d)
+        if i < 0 then i = 0 elseif i > 17 then i = 17 end
         local v = i == 17 and 255 or i * 15
         return (v << 16) | (v << 8) | v
     end
-    return (R[clamp(math.floor(r * 5 / 255 + d + 0.5), 5)] << 16) | (G[clamp(math.floor(g * 7 / 255 + d + 0.5), 7)] << 8)
-        | B[clamp(math.floor(b * 4 / 255 + d + 0.5), 4)]
+    r, g, b = floor(r * 5 / 255 + d + 0.5), floor(g * 7 / 255 + d + 0.5), floor(b * 4 / 255 + d + 0.5)
+    if r < 0 then r = 0 elseif r > 5 then r = 5 end
+    if g < 0 then g = 0 elseif g > 7 then g = 7 end
+    if b < 0 then b = 0 elseif b > 4 then b = 4 end
+    return (R[r] << 16) | (G[g] << 8) | B[b]
 end
+
+-- Scratch for _build, kept between builds so an animated shader makes no garbage per frame (shade
+-- functions don't build shaders, so one set serves all): a row's top and bottom pixels, and each
+-- colour pair's group (its key, b << 24 | a) with the group's size and then its next slot.
+local top, bottom, keys, slot = {}, {}, {}, {}
 
 ---Work out the picture as runs: {top, bottom, x, y, length, ...} relative to the widget.
 ---@private
@@ -115,7 +129,9 @@ function Shader:_build(t)
     local shade, half = self._shade, self:halfBlocks()
     local dither = self:dither()
     local snap = gpu.getDepth() == 8 -- snap to the palette even undithered, so equal cells merge
-    local ops, top, bottom = {}, {}, {}
+    -- An animated shader reuses its tables: the runs go into the spare one kept from the last
+    -- build, and are grouped into the last picture's.
+    local runs = self._spare or {}
     local pixels = half and height * 2 or height
     local n = 0
     for row = 1, height do
@@ -138,33 +154,54 @@ function Shader:_build(t)
                 length = length + 1
             end
             if a then
-                ops[n + 1], ops[n + 2], ops[n + 3], ops[n + 4], ops[n + 5] = a, b, col, row, length
+                runs[n + 1], runs[n + 2], runs[n + 3], runs[n + 4], runs[n + 5] = a, b, col, row, length
                 n = n + 5
             end
             col = col + length
         end
     end
+    for i = n + 1, #runs do runs[i] = nil end
     -- Runs never overlap, so draw them grouped by colour (background first): each colour is then
-    -- set once per frame instead of once per run.
-    local groups, keys = {}, {}
+    -- set once per frame instead of once per run. Groups are in key order, runs in a group in
+    -- their own order.
+    local count = 0
     for i = 1, n, 5 do
-        local key = ops[i + 1] << 24 | ops[i]
-        local group = groups[key]
-        if not group then group = {} groups[key] = group keys[#keys + 1] = key end
-        group[#group + 1] = i
+        local key = runs[i + 1] << 24 | runs[i]
+        local size = slot[key]
+        if size then slot[key] = size + 5 else count = count + 1 keys[count] = key slot[key] = 5 end
     end
-    if #keys * 5 == n then return ops end -- every run has its own colours
-    table.sort(keys)
-    local sorted, m = {}, 0
-    for k = 1, #keys do
-        local group = groups[keys[k]]
-        for g = 1, #group do
-            local i = group[g]
-            sorted[m + 1], sorted[m + 2], sorted[m + 3], sorted[m + 4], sorted[m + 5] = ops[i], ops[i + 1], ops[i + 2], ops[i + 3], ops[i + 4]
-            m = m + 5
+    for k = count + 1, #keys do keys[k] = nil end
+    local ops, spare = runs, self._ops
+    if count * 5 < n then -- else every run has its own colours: keep them as they are
+        ops, spare = self._ops or {}, runs
+        table.sort(keys)
+        local at = 1
+        for k = 1, count do
+            local key = keys[k]
+            at, slot[key] = at + slot[key], at
         end
+        for i = 1, n, 5 do
+            local key = runs[i + 1] << 24 | runs[i]
+            local p = slot[key]
+            slot[key] = p + 5
+            ops[p], ops[p + 1], ops[p + 2], ops[p + 3], ops[p + 4] = runs[i], runs[i + 1], runs[i + 2], runs[i + 3], runs[i + 4]
+        end
+        for i = n + 1, #ops do ops[i] = nil end
     end
-    return sorted
+    for k = 1, count do slot[keys[k]] = nil end
+    self._spare = self:animated() and spare or nil
+    return ops
+end
+
+-- One pass of _gpufill's clip: x, y, width, height cut to the box px, py, pw, ph, or nil if
+-- nothing is left.
+local function cut(x, y, w, h, px, py, pw, ph)
+    if pw <= 0 or ph <= 0 or x >= px + pw or y >= py + ph or x + w <= px or y + h <= py then return end
+    if x < px then w = w + (x - px) x = px end
+    if y < py then h = h + (y - py) y = py end
+    if x + w > px + pw then w = pw - (x - px) end
+    if y + h > py + ph then h = ph - (y - py) end
+    return x, y, w, h
 end
 
 function Shader:draw()
@@ -180,17 +217,28 @@ function Shader:draw()
         self._ops, self._opsX, self._opsY, self._opsW, self._opsH = ops, x, y, self:width(), self:height()
     end
     if animated then run.request(1 / self:fps()) end
+    -- Runs are clipped as _gpufill does (to the parent's drawn area, then to this widget, the same
+    -- arithmetic), with both boxes looked up once: a shader can be thousands of runs.
+    local parent = self:getParent()
+    local px, py, pw, ph, sw, sh
+    if parent then
+        px, py, pw, ph = parent:absX(), parent:absY(), parent:width(), parent:height()
+        if parent._drawnBounds then
+            local dx, dy, dw, dh = parent:_drawnBounds()
+            if dx then px, py, pw, ph = dx, dy, dw, dh end
+        end
+        sw, sh = self:width(), self:height()
+    end
     local oldBG, oldFG = gpu.getBackground(), gpu.getForeground()
     local bg, fg = oldBG, oldFG
     for i = 1, #ops, 5 do
         local a, b = ops[i], ops[i + 1]
-        local cx, cy = x + ops[i + 2] - 1, y + ops[i + 3] - 1
         if b ~= bg then gpu.setBackground(b) bg = b end
-        if a == b then
-            self:_gpufill(cx, cy, ops[i + 4], 1, " ")
-        else
-            if a ~= fg then gpu.setForeground(a) fg = a end
-            self:_gpufill(cx, cy, ops[i + 4], 1, HALF)
+        if a ~= b and a ~= fg then gpu.setForeground(a) fg = a end
+        if parent then
+            local cx, cy, w, h = cut(floor(x + ops[i + 2] - 1), floor(y + ops[i + 3] - 1), ops[i + 4], 1, px, py, pw, ph)
+            if cx then cx, cy, w, h = cut(cx, cy, w, h, x, y, sw, sh) end
+            if cx then gpu.fill(cx, cy, w, h, a == b and " " or HALF) end
         end
     end
     gpu.setBackground(oldBG)

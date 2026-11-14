@@ -12,44 +12,117 @@ local rset, rfill, rcopy, rget = real.set, real.fill, real.copy, real.get
 local rgetBG, rgetFG, rsetBG, rsetFG = real.getBackground, real.getForeground, real.setBackground, real.setForeground
 local ulen, uwlen, usub = unicode.len, unicode.wlen, unicode.sub
 local min, max, huge = math.min, math.max, math.huge
+local mtype, tointeger = math.type, math.tointeger
 
 local gpu = setmetatable({frames = 0}, {__index = real})
 
--- Each logged call is S values: kind, x, y, a, b, c, d, bg, bgPalette, fg, fgPalette.
--- "s" set: a = text, b = vertical. "F" fill: a = width, b = height, c = char.
--- "c" copy: a = width, b = height, c = tx, d = ty.
-local S = 11
+-- Each logged call is S = 3 values, so the logs stay small (two are kept, this frame's and the
+-- last) and comparing two calls takes three compares:
+--   at      x, y, a, b (12 bits each, offset by 2048) and the kind (2 bits) in one integer
+--   colours background and foreground in one integer, 25 bits each: an RGB colour, or 2^24 + a
+--           palette index
+--   text    "s" set: the text (a, b unused). "F" fill: the char (a = width, b = height).
+-- A call with a value that doesn't fit (a fractional or far-off coordinate, an odd colour, or
+-- arguments the GPU would refuse) and every copy is logged as false, false, {kind, x, y, a, b, c,
+-- d, bg, bgPalette, fg, fgPalette}. A new table never equals the last frame's, so such a call
+-- always counts as changed: right, only slower. (Copies replay the whole frame anyway.)
+local S = 3
+local SET, VERTICAL, FILL = 0, 1, 2
 local recording, direct = false, false
 local log, n, applied -- this frame's calls, values logged, values replayed
 local whole -- this frame must be replayed whole (it copies)
 local cutWide -- a clipped replay cut text with wide characters, which can't be cut by index
 local bg, fg, bgPalette, fgPalette -- colours as drawn so far
+local bgCode, fgCode, key -- the same packed (nil if a colour doesn't fit), and both in one (or false)
 local cbg, cfg, cbgPalette, cfgPalette -- colours on the real GPU while replaying
+local ckey -- the packed colours the real GPU has, if set from a packed call
 
--- (In OpenComputers string patterns and unicode calls allocate; recording uses neither.)
-local function put(kind, x, y, a, b, c, d)
+-- A colour as 25 bits, or nil if it doesn't fit.
+local function code(color, palette)
+    if mtype(color) ~= "integer" then
+        if mtype(color) ~= "float" then return end
+        color = tointeger(color)
+        if not color then return end
+    end
+    if palette == true then
+        if color >= 0 and color < 16 then return 0x1000000 | color end
+    elseif not palette and color >= 0 and color <= 0xFFFFFF then
+        return color
+    end
+end
+
+local function int(v)
+    if mtype(v) == "float" then return tointeger(v) end
+    if mtype(v) == "integer" then return v end
+end
+-- x, y, a, b and the kind in one integer, or nil if a value doesn't fit.
+local function pack(kind, x, y, a, b)
+    if mtype(x) ~= "integer" or mtype(y) ~= "integer" or mtype(a) ~= "integer" or mtype(b) ~= "integer" then
+        x, y, a, b = int(x), int(y), int(a), int(b)
+        if not (x and y and a and b) then return end
+    end
+    x, y, a, b = x + 2048, y + 2048, a + 2048, b + 2048
+    if (x | y | a | b) & -4096 ~= 0 then return end -- outside -2048..2047
+    return x << 38 | y << 26 | a << 14 | b << 2 | kind
+end
+
+-- Log a call that can't be packed. (Packed calls are logged inline in set and fill, the hot path.
+-- In OpenComputers string patterns and unicode calls allocate; recording uses neither.)
+local function box(kind, x, y, a, b, c, d)
     local i = n
-    log[i + 1], log[i + 2], log[i + 3], log[i + 4], log[i + 5], log[i + 6], log[i + 7] = kind, x, y, a, b, c, d
-    log[i + 8], log[i + 9], log[i + 10], log[i + 11] = bg, bgPalette, fg, fgPalette
+    log[i + 1], log[i + 2], log[i + 3] = false, false, {kind, x, y, a, b, c, d, bg, bgPalette, fg, fgPalette}
     n = i + S
 end
 
-local function colours(i)
-    local b, bp, f, fp = log[i + 8], log[i + 9], log[i + 10], log[i + 11]
+-- Logged call i (its index - 1) of `l` as kind, x, y, a, b, c, d.
+local function call(l, i)
+    local at = l[i + 1]
+    if not at then
+        local raw = l[i + 3]
+        return raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]
+    end
+    local kind, x, y = at & 3, (at >> 38) - 2048, (at >> 26 & 0xFFF) - 2048
+    if kind == FILL then return "F", x, y, (at >> 14 & 0xFFF) - 2048, (at >> 2 & 0xFFF) - 2048, l[i + 3] end
+    return "s", x, y, l[i + 3], kind == VERTICAL
+end
+
+local function setColours(b, bp, f, fp)
     if b ~= cbg or bp ~= cbgPalette then cbg, cbgPalette = b, bp rsetBG(b, bp) end
     if f ~= cfg or fp ~= cfgPalette then cfg, cfgPalette = f, fp rsetFG(f, fp) end
+end
+-- Give the real GPU the colours of logged call i. Callers skip it when they equal ckey.
+local function colours(i)
+    local c = log[i + 2]
+    if not c then
+        local raw = log[i + 3]
+        ckey = nil
+        return setColours(raw[8], raw[9], raw[10], raw[11])
+    end
+    local b, f = c >> 25, c & 0x1FFFFFF
+    setColours(b & 0xFFFFFF, b > 0xFFFFFF, f & 0xFFFFFF, f > 0xFFFFFF)
+    ckey = c
 end
 
 -- Draw logged call i (its index - 1), clipped to x1..x2, y1..y2 when given.
 local function draw(i, x1, y1, x2, y2)
-    local kind, x, y, a, b, c = log[i + 1], log[i + 2], log[i + 3], log[i + 4], log[i + 5], log[i + 6]
+    local at, kind, x, y, a, b, c, d = log[i + 1]
+    if at then -- decoded here, not by call(): this runs for every logged call of a changed frame
+        x, y = (at >> 38) - 2048, (at >> 26 & 0xFFF) - 2048
+        if at & 3 == FILL then
+            kind, a, b, c = "F", (at >> 14 & 0xFFF) - 2048, (at >> 2 & 0xFFF) - 2048, log[i + 3]
+        else
+            kind, a, b = "s", log[i + 3], at & 3 == VERTICAL
+        end
+    else
+        kind, x, y, a, b, c, d = call(log, i)
+    end
     if kind == "F" then
         if x1 then
             local l, t, r, bottom = max(x, x1), max(y, y1), min(x + a - 1, x2), min(y + b - 1, y2)
             if l > r or t > bottom then return end
             x, y, a, b = l, t, r - l + 1, bottom - t + 1
         end
-        colours(i)
+        if log[i + 2] ~= ckey then colours(i) end
         rfill(x, y, a, b, c)
     elseif kind == "s" then
         if x1 then
@@ -70,10 +143,10 @@ local function draw(i, x1, y1, x2, y2)
                 a = usub(a, from, to)
             end
         end
-        colours(i)
+        if log[i + 2] ~= ckey then colours(i) end
         rset(x, y, a, b)
     else
-        rcopy(x, y, a, b, c, log[i + 7])
+        rcopy(x, y, a, b, c, d)
     end
 end
 
@@ -88,7 +161,7 @@ local function replay(x1, y1, x2, y2)
     end
 end
 local function apply(x1, y1, x2, y2)
-    cbg, cfg, cbgPalette, cfgPalette = nil, nil, nil, nil
+    cbg, cfg, cbgPalette, cfgPalette, ckey = nil, nil, nil, nil, nil
     applied, cutWide = 0, false
     while not pcall(replay, x1, y1, x2, y2) do end
 end
@@ -96,11 +169,11 @@ end
 -- Grow the box x1, y1, x2, y2 by the area of logged calls from..to (indexes - 1) of `l`.
 local function bounds(l, from, to, x1, y1, x2, y2)
     for i = from, to - 1, S do
-        local kind, x, y, w, h = l[i + 1], l[i + 2], l[i + 3], l[i + 4], l[i + 5]
+        local kind, x, y, w, h, c, d = call(l, i)
         if kind == "s" then
             if h then w, h = 1, ulen(w) else w, h = uwlen(w), 1 end
         elseif kind == "c" then
-            x, y = x + l[i + 6], y + l[i + 7]
+            x, y = x + c, y + d
         end
         if w > 0 and h > 0 then
             x1, y1, x2, y2 = min(x1, x), min(y1, y), max(x2, x + w - 1), max(y2, y + h - 1)
@@ -109,20 +182,15 @@ local function bounds(l, from, to, x1, y1, x2, y2)
     return x1, y1, x2, y2
 end
 
--- Are calls i of `a` and j of `b` (indexes - 1) the same?
-local function same(a, i, b, j)
-    for k = 1, S do
-        if a[i + k] ~= b[j + k] then return false end
-    end
-    return true
-end
-
 -- The rectangle covering every call that differs between `old` and this frame's log.
 local function damage(old, oldN)
-    local m, p, s = min(n, oldN), 0, 0
-    while p < m and same(log, p, old, p) do p = p + S end
-    while s < m - p and same(log, n - s - S, old, oldN - s - S) do s = s + S end
-    local x1, y1, x2, y2 = bounds(log, p, n - s, huge, huge, -huge, -huge)
+    local new, m, p, s = log, min(n, oldN), 0, 0
+    while p < m and new[p + 1] == old[p + 1] and new[p + 2] == old[p + 2] and new[p + 3] == old[p + 3] do p = p + S end
+    local i, j = n - S, oldN - S
+    while s < m - p and new[i + 1] == old[j + 1] and new[i + 2] == old[j + 2] and new[i + 3] == old[j + 3] do
+        s, i, j = s + S, i - S, j - S
+    end
+    local x1, y1, x2, y2 = bounds(new, p, n - s, huge, huge, -huge, -huge)
     return bounds(old, p, oldN - s, x1, y1, x2, y2)
 end
 
@@ -135,6 +203,8 @@ function gpu.record(frame)
     bg, bgPalette = rgetBG()
     fg, fgPalette = rgetFG()
     bgPalette, fgPalette = bgPalette or false, fgPalette or false
+    bgCode, fgCode = code(bg, bgPalette), code(fg, fgPalette)
+    key = bgCode and fgCode and (bgCode << 25 | fgCode) or false
 end
 
 ---Stop recording and bring the frame's buffer up to date. Returns false if nothing changed since
@@ -174,7 +244,7 @@ function gpu.get(x, y)
     if recording and not direct then
         apply()
         rsetBG(bg, bgPalette) rsetFG(fg, fgPalette)
-        cbg, cfg, cbgPalette, cfgPalette = bg, fg, bgPalette, fgPalette
+        cbg, cfg, cbgPalette, cfgPalette, ckey = bg, fg, bgPalette, fgPalette, nil
         direct = true
     end
     return rget(x, y)
@@ -194,7 +264,9 @@ function gpu.setBackground(color, palette)
     if not recording then return rsetBG(color, palette) end
     local old = bg
     bg, bgPalette = color, palette or false
-    if direct and (bg ~= cbg or bgPalette ~= cbgPalette) then cbg, cbgPalette = bg, bgPalette rsetBG(color, palette) end
+    bgCode = code(color, palette)
+    key = bgCode and fgCode and (bgCode << 25 | fgCode) or false
+    if direct and (bg ~= cbg or bgPalette ~= cbgPalette) then cbg, cbgPalette, ckey = bg, bgPalette, nil rsetBG(color, palette) end
     return old
 end
 
@@ -202,21 +274,38 @@ function gpu.setForeground(color, palette)
     if not recording then return rsetFG(color, palette) end
     local old = fg
     fg, fgPalette = color, palette or false
-    if direct and (fg ~= cfg or fgPalette ~= cfgPalette) then cfg, cfgPalette = fg, fgPalette rsetFG(color, palette) end
+    fgCode = code(color, palette)
+    key = bgCode and fgCode and (bgCode << 25 | fgCode) or false
+    if direct and (fg ~= cfg or fgPalette ~= cfgPalette) then cfg, cfgPalette, ckey = fg, fgPalette, nil rsetFG(color, palette) end
     return old
 end
 
 function gpu.set(x, y, value, vertical)
     if not recording then return rset(x, y, value, vertical) end
-    if type(value) == "number" then value = tostring(value) end -- so it can be clipped
-    put("s", x, y, value, vertical or false)
+    local t = type(value)
+    if t == "number" then value, t = tostring(value), "string" end -- so it can be clipped
+    local at = key and t == "string" and (not vertical or vertical == true) and pack(vertical and VERTICAL or SET, x, y, 0, 0)
+    if at then
+        local i = n
+        log[i + 1], log[i + 2], log[i + 3] = at, key, value
+        n = i + S
+    else
+        box("s", x, y, value, vertical or false)
+    end
     if direct then applied = n return rset(x, y, value, vertical) end
     return true
 end
 
 function gpu.fill(x, y, width, height, char)
     if not recording then return rfill(x, y, width, height, char) end
-    put("F", x, y, width, height, char)
+    local at = key and pack(FILL, x, y, width, height)
+    if at then
+        local i = n
+        log[i + 1], log[i + 2], log[i + 3] = at, key, char
+        n = i + S
+    else
+        box("F", x, y, width, height, char)
+    end
     if direct then applied = n return rfill(x, y, width, height, char) end
     return true
 end
@@ -224,7 +313,7 @@ end
 function gpu.copy(x, y, width, height, tx, ty)
     if not recording then return rcopy(x, y, width, height, tx, ty) end
     whole = true -- a copy reads what earlier calls drew
-    put("c", x, y, width, height, tx, ty)
+    box("c", x, y, width, height, tx, ty)
     if direct then applied = n return rcopy(x, y, width, height, tx, ty) end
     return true
 end

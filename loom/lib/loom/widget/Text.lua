@@ -314,23 +314,31 @@ function Text:textAlignment(xalignment, yalignment)
 end
 
 function Text:scrollX(num, override)
+    if num == nil and override == nil then return self._scrollindexX or 0 end
     checkArg(1, num, 'number', 'nil')
     checkArg(2, override, 'boolean','nil')
     local oldValue = self._scrollindexX or 0
     if (num) then
         self._scrollindexX = override and num or ((self._scrollindexX or oldValue) + num)
-        if self._scrollindexX ~= oldValue then self:invokeCallback("scrollXChanged", oldValue, self._scrollindexX) end
+        if self._scrollindexX ~= oldValue then
+            Widget._moved() -- children move
+            self:invokeCallback("scrollXChanged", oldValue, self._scrollindexX)
+        end
     end
     return oldValue
 end
 
 function Text:scrollY(num, override)
+    if num == nil and override == nil then return self._scrollindexY or 0 end
     checkArg(1, num, 'number', 'nil')
     checkArg(2, override, 'boolean','nil')
     local oldValue = self._scrollindexY or 0
     if (num) then
         self._scrollindexY = override and num or ((self._scrollindexY or oldValue) + num)
-        if self._scrollindexY ~= oldValue then self:invokeCallback("scrollYChanged", oldValue, self._scrollindexY) end
+        if self._scrollindexY ~= oldValue then
+            Widget._moved() -- children move
+            self:invokeCallback("scrollYChanged", oldValue, self._scrollindexY)
+        end
     end
     return oldValue
 end

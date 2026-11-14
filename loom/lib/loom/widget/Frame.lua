@@ -176,11 +176,15 @@ function Frame:doubleTouchDelay(value)
 end
 
 function Frame:_drawnBounds(x,y,width,height)
+    local oldValue = self._drawnBoundsValues
+    if x == nil and y == nil and width == nil and height == nil then -- the getter, run per GPU call
+        if oldValue then return oldValue[1], oldValue[2], oldValue[3], oldValue[4] end
+        return
+    end
     checkArg(1, x, 'number', 'nil')
     checkArg(1, y, 'number', 'nil')
     checkArg(1, width, 'number', 'nil')
     checkArg(1, height, 'number', 'nil')
-    local oldValue = self._drawnBoundsValues
     if (x and y and width and height) then 
         self._drawnBoundsValues = self._drawnBoundsValues or {}
         self._drawnBoundsValues[1] = x -- = {x,y,width,height} 
@@ -226,6 +230,7 @@ function Frame:_initBuffer()
         end
     end
     gpu.record(self)
+    Widget._cachePositions(true)
     return screenBuffer, buffer
 end
 
@@ -262,6 +267,7 @@ end
 ---@param buffer? number
 function Frame:_restoreBuffer(screenBuffer, buffer)
     if not screenBuffer then return end
+    Widget._cachePositions(false)
     local changed, x1, y1, x2, y2 = gpu.finish(self)
     if buffer then
         if changed then
