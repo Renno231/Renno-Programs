@@ -206,6 +206,7 @@ end
 
 function Shader:draw()
     if not self:visible() then return end
+    local part = gpu.part(self) -- an animated shader's frames redraw only this
     local x, y = self:absX(), self:absY()
     local ops = self._ops
     local animated = self:animated()
@@ -216,7 +217,7 @@ function Shader:draw()
         self._fills = #ops // 5
         self._ops, self._opsX, self._opsY, self._opsW, self._opsH = ops, x, y, self:width(), self:height()
     end
-    if animated then run.request(1 / self:fps()) end
+    if animated then run.request(1 / self:fps(), self) end
     -- Runs are clipped as _gpufill does (to the parent's drawn area, then to this widget, the same
     -- arithmetic), with both boxes looked up once: a shader can be thousands of runs.
     local parent = self:getParent()
@@ -243,6 +244,7 @@ function Shader:draw()
     end
     gpu.setBackground(oldBG)
     gpu.setForeground(oldFG)
+    gpu.partEnd(part)
     return true
 end
 

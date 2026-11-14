@@ -280,6 +280,29 @@ function Frame:_restoreBuffer(screenBuffer, buffer)
     end
 end
 
+---Redraw only `widgets`' parts of this root frame's last draw (see `gpu.part`) and copy what
+---changed to the screen. A widget whose draw fails gets a whole frame, which shows the error.
+---@package
+function Frame:_redraw(widgets)
+    local buffer = self._buffer
+    if buffer then gpu.setActiveBuffer(buffer) end
+    Widget._cachePositions(true)
+    for _, widget in ipairs(widgets) do
+        local ok, changed, x1, y1, x2, y2 = xpcall(gpu.redo, debug.traceback, self, widget, function() widget:draw() end)
+        if not ok then
+            run.error(widget, tostring(changed), "draw")
+            run.request(0)
+        elseif changed and buffer then
+            local x, y = self:absX(), self:absY()
+            local r, b = x + self:width() - 1, y + self:height() - 1
+            if x1 then x, y, r, b = math.max(x, x1), math.max(y, y1), math.min(r, x2), math.min(b, y2) end
+            if x <= r and y <= b then self:_blit(0, buffer, x, y, r - x + 1, b - y + 1) end
+        end
+    end
+    Widget._cachePositions(false)
+    if buffer then gpu.setActiveBuffer(0) end
+end
+
 local function byZ(a, b) return a:z() < b:z() end
 
 function Frame:_sort()

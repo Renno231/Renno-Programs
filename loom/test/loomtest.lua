@@ -365,6 +365,44 @@ do
     root:Destroy()
 end
 
+-- loom.run: an animated shader redraws alone, and widgets over it stay over it --------------------
+do
+    local root = scene()
+    local colour, reach = 0x0000ff, 10
+    local shader = gui.Shader(root, 2, 2, 10, 3, function(x) if x <= reach then return colour end end)
+    shader:dither(false)
+    shader:animated(true)
+    local cover = gui.Rectangle(root, 5, 3, 3, 1, 0xff0000) -- drawn after the shader, over it
+    local wholeDraws, shaderDraws, coverDraws = 0, 0, 0
+    local draw, drawShader, drawCover = root.draw, shader.draw, cover.draw
+    root.draw = function(self) wholeDraws = wholeDraws + 1 return draw(self) end
+    shader.draw = function(self) shaderDraws = shaderDraws + 1 return drawShader(self) end
+    cover.draw = function(self) coverDraws = coverDraws + 1 return drawCover(self) end
+    -- The shader changes with nothing asking for a redraw (its colour, and it stops painting its
+    -- right part): its own frames show it.
+    local flip = event.timer(1, function() colour, reach = 0x00ff00, 6 end)
+    local stop = event.timer(2, function() loom.stop() end)
+    loom.run(root, 0.5)
+    event.cancel(flip) event.cancel(stop)
+    check("animated shader: a frame each 1/20 s", shaderDraws >= 25, shaderDraws .. " shader draws in 2 s")
+    check("animated shader: the rest redraws only per interval", wholeDraws <= 6 and coverDraws <= 6,
+        ("%d whole draws, %d cover draws in 2 s"):format(wholeDraws, coverDraws))
+    local _, _, shown = proxy.get(3, 2)
+    eq("the shader's own frames show its change", ("%06x"):format(shown), "00ff00")
+    local _, _, uncovered = proxy.get(10, 2)
+    eq("what the shader stops painting shows what is under it", ("%06x"):format(uncovered), "000000")
+    local _, _, over = proxy.get(6, 3)
+    eq("a widget over the shader stays over it", ("%06x"):format(over), "ff0000")
+    local partial = {}
+    for y = 1, 6 do partial[y] = {} for x = 1, 14 do partial[y][x] = table.concat({proxy.get(x, y)}, "/") end end
+    root._lastDrawLog = nil
+    root:draw()
+    local diff = 0
+    for y = 1, 6 do for x = 1, 14 do if table.concat({proxy.get(x, y)}, "/") ~= partial[y][x] then diff = diff + 1 end end end
+    check("shader frames match a whole redraw", diff == 0, diff .. " cells differ")
+    root:Destroy()
+end
+
 -- Keyboard navigation: arrows, Enter/Space as touch, outline, per-widget keys, onKey ----------
 do
     input.attach()

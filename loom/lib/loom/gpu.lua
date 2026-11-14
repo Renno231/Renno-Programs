@@ -36,6 +36,12 @@ local bg, fg, bgPalette, fgPalette -- colours as drawn so far
 local bgCode, fgCode, key -- the same packed (nil if a colour doesn't fit), and both in one (or false)
 local cbg, cfg, cbgPalette, cfgPalette -- colours on the real GPU while replaying
 local ckey -- the packed colours the real GPU has, if set from a packed call
+-- Parts (gpu.part): a widget that animates alone marks the calls it logs, so a frame only it needs
+-- redoes just those (gpu.redo). Each part is {widget, from, to, bg, bgPalette, fg, fgPalette}: its
+-- calls are log values from + 1 .. to, drawn starting with those colours.
+local parts -- this root draw's parts, in log order
+local redoing = false
+local scratch = {} -- a redone part's calls (gpu.release frees it)
 
 -- A colour as 25 bits, or nil if it doesn't fit.
 local function code(color, palette)
@@ -197,7 +203,7 @@ end
 ---Start recording a root frame's draw. `frame` keeps the call logs between draws.
 ---`gpu.frames` counts root draws, so widgets can tell whether they were drawn in the latest one.
 function gpu.record(frame)
-    log = frame._drawLog or {}
+    log, parts = frame._drawLog or {}, {}
     n, applied, whole, recording, direct = 0, 0, false, true, false
     gpu.frames = gpu.frames + 1
     bg, bgPalette = rgetBG()
@@ -236,8 +242,189 @@ function gpu.finish(frame)
     end
     recording, direct = false, false
     frame._drawLog, frame._lastDrawLog, frame._lastDrawCount, frame._lastWhole = old, log, n, whole
-    log = nil
+    frame._parts, log, parts = parts, nil, nil
     return changed, x1, y1, x2, y2
+end
+
+---While a root frame is recorded, start `widget`'s part: the calls it logs until `gpu.partEnd`.
+---A frame that only this widget needs then redoes just them (`gpu.redo`). A part must not read
+---the screen (`get`) or copy. Returns the part, or nil when no root draw is being recorded.
+function gpu.part(widget)
+    if not recording or redoing then return end
+    local p = {widget, n, n, bg, bgPalette, fg, fgPalette}
+    parts[#parts + 1] = p
+    return p
+end
+---End a part started by `gpu.part` (nil does nothing).
+function gpu.partEnd(p) if p then p[3] = n end end
+
+-- The cells of a redo's box (row-major from 1), one integer each: the last call covering the cell
+-- (its index, + 1, 0 for none) in the log before the part (bits 0-19), in the part's old calls
+-- (20-39) and in its new ones (40-59), and bit 60 when the log after the part covers it. Then each
+-- cell holds the call to draw there, + 1 (0: unchanged). Kept between redos (gpu.release frees it).
+local grid = {}
+local UNDER, WAS, NOW, AFTER, FIELD = 0, 20, 40, 1 << 60, 0xFFFFF
+-- The changed runs of a redo (call, x, y, last x, and the call's colours), and their drawing order:
+-- by colours, so each colour is set once.
+local runCall, runX, runY, runEnd, runKey, order = {}, {}, {}, {}, {}, {}
+local function byColours(a, b) return runKey[a] < runKey[b] end
+
+---Free what redos keep between frames. loom.run calls it when no widget animates alone.
+function gpu.release()
+    scratch, grid, runCall, runX, runY, runEnd, runKey, order = {}, {}, {}, {}, {}, {}, {}, {}
+end
+
+-- Put in `shift`'s field of each cell of the box x1..x2, y1..y2 (w wide) the last of calls
+-- from..to (indexes - 1) of `l` that covers it (shift nil: set the AFTER bit).
+local function cover(l, from, to, x1, y1, x2, y2, w, shift)
+    local keep = shift and ~(FIELD << shift)
+    for i = from, to - S, S do
+        local at, x, y, cw, ch = l[i + 1], nil, nil, nil, nil
+        if at then
+            x, y = (at >> 38) - 2048, (at >> 26 & 0xFFF) - 2048
+            local kind = at & 3
+            if kind == FILL then
+                cw, ch = (at >> 14 & 0xFFF) - 2048, (at >> 2 & 0xFFF) - 2048
+            elseif x <= x2 and y <= y2 and (kind == VERTICAL or y >= y1) then -- measure only text that may reach the box
+                if kind == VERTICAL then cw, ch = 1, ulen(l[i + 3]) else cw, ch = uwlen(l[i + 3]), 1 end
+            else
+                cw, ch = 0, 0
+            end
+        else
+            local kind, c, d
+            kind, x, y, cw, ch, c, d = call(l, i)
+            if kind == "s" then
+                if ch then cw, ch = 1, ulen(cw) else cw, ch = uwlen(cw), 1 end
+            elseif kind == "c" then
+                x, y = x + c, y + d
+            end
+        end
+        local left, top, right, bottom = max(x, x1), max(y, y1), min(x + cw - 1, x2), min(y + ch - 1, y2)
+        for row = top, bottom do
+            local at0 = (row - y1) * w - x1 + 1
+            if shift then
+                local v = (i + 1) << shift
+                for col = left, right do grid[at0 + col] = grid[at0 + col] & keep | v end
+            else
+                for col = left, right do grid[at0 + col] = grid[at0 + col] | AFTER end
+            end
+        end
+    end
+end
+
+-- Whether call i of `a` and call j of `b` put the same thing in a cell: fills of the same character
+-- and colours, or the same text call.
+local function same(a, i, b, j)
+    local p, q = a[i + 1], b[j + 1]
+    if not p or not q or a[i + 2] ~= b[j + 2] or a[i + 3] ~= b[j + 3] then return false end
+    return p == q or (p & 3 == FILL and q & 3 == FILL)
+end
+
+---Redo `widget`'s part of `frame`'s last draw: `redraw()` logs the widget's calls again and they
+---replace its part of the log. Every call covers whole cells, so a cell shows the last call over
+---it: only the cells whose last call now puts something else there are drawn, so what was drawn
+---under or over the widget stays as it was. Returns like `gpu.finish`: false if nothing changed
+---(or the widget had no part in that draw), else true and the changed rectangle (none when it all
+---had to be replayed). The frame's buffer must be active.
+function gpu.redo(frame, widget, redraw)
+    local all, p = frame._parts, nil
+    for i = 1, all and #all or 0 do if all[i][1] == widget then p = all[i] break end end
+    if not p then return false end
+    local old, oldN, from, to = frame._lastDrawLog, frame._lastDrawCount, p[2], p[3]
+    log, n, recording, redoing, direct = scratch, 0, true, true, false
+    bg, bgPalette, fg, fgPalette = p[4], p[5], p[6], p[7]
+    bgCode, fgCode = code(bg, bgPalette), code(fg, fgPalette)
+    key = bgCode and fgCode and (bgCode << 25 | fgCode) or false
+    local ok, err = pcall(redraw)
+    local m = n
+    recording, redoing, log = false, false, nil
+    if not ok then error(err, 0) end
+    if m == to - from then
+        local unchanged = true
+        for i = 1, m do if scratch[i] ~= old[from + i] then unchanged = false break end end
+        if unchanged then return false end
+    end
+    local x1, y1, x2, y2 = bounds(scratch, 0, m, huge, huge, -huge, -huge)
+    x1, y1, x2, y2 = bounds(old, from, to, x1, y1, x2, y2)
+    local w, cells = x2 - x1 + 1, (x2 - x1 + 1) * (y2 - y1 + 1)
+    if cells > 0 and not frame._lastWhole then
+        for c = 1, cells do grid[c] = 0 end
+        cover(old, 0, from, x1, y1, x2, y2, w, UNDER)
+        cover(old, from, to, x1, y1, x2, y2, w, WAS)
+        cover(scratch, 0, m, x1, y1, x2, y2, w, NOW)
+        cover(old, to, oldN, x1, y1, x2, y2, w, nil)
+        for c = 1, cells do
+            local g, change = grid[c], 0
+            if g < AFTER then -- else a later call still covers it
+                local under, was, now = g & FIELD, g >> WAS & FIELD, g >> NOW
+                local shown = was > 0 and was or under -- the call that put there what is there now
+                if now > 0 then
+                    if not (shown > 0 and same(old, shown - 1, scratch, now - 1)) then change = from + now end
+                elseif was > 0 then
+                    change = under -- uncovered: what was under the part shows again
+                end
+            end
+            grid[c] = change
+        end
+    end
+    local delta = m - (to - from)
+    if delta ~= 0 then -- make room (or close the gap), and move the parts after this one
+        table.move(old, to + 1, oldN, to + 1 + delta)
+        for i = oldN + delta + 1, oldN do old[i] = nil end
+        for i = 1, #all do
+            local q = all[i]
+            if q ~= p and q[2] >= to then q[2], q[3] = q[2] + delta, q[3] + delta end
+        end
+    end
+    table.move(scratch, 1, m, from + 1, old)
+    p[3] = from + m
+    frame._lastDrawCount = oldN + delta
+    if cells <= 0 then return false end
+    -- Draw onto the buffer, then leave the real colours as they were.
+    local b, bp = rgetBG()
+    local f, fp = rgetFG()
+    log, n = old, oldN + delta
+    local dx1, dy1, dx2, dy2 = huge, huge, -huge, -huge
+    if frame._lastWhole then -- copies read what was drawn before them: replay it all
+        apply()
+        dx1, dy1, dx2, dy2 = nil, nil, nil, nil
+    else
+        local count = 0
+        for y = y1, y2 do
+            local at0 = (y - y1) * w - x1 + 1
+            local x = x1
+            while x <= x2 do
+                local v = grid[at0 + x]
+                if v > 0 then
+                    local i, e = v - 1, x
+                    while e < x2 and grid[at0 + e + 1] == v do e = e + 1 end
+                    count = count + 1
+                    runCall[count], runX[count], runY[count], runEnd[count], runKey[count], order[count] = i, x, y, e, old[i + 2] or -1, count
+                    x = e + 1
+                else
+                    x = x + 1
+                end
+            end
+        end
+        for k = count + 1, #order do order[k] = nil end
+        table.sort(order, byColours)
+        cbg, cfg, cbgPalette, cfgPalette, ckey, cutWide = nil, nil, nil, nil, nil, false
+        for k = 1, count do
+            local r = order[k]
+            pcall(draw, runCall[r], runX[r], runY[r], runEnd[r], runY[r]) -- a call with bad arguments fails as it did when first drawn
+        end
+        if cutWide then -- text with wide characters can't be cut to a cell: replay the box
+            apply(x1, y1, x2, y2)
+        end
+        -- The whole box is copied to the screen: its size stays the same from frame to frame, so
+        -- the frame's staging buffer is kept.
+        if count > 0 then dx1, dy1, dx2, dy2 = x1, y1, x2, y2 end
+    end
+    log = nil
+    if cbg ~= nil and (cbg ~= b or cbgPalette ~= bp) then rsetBG(b, bp) end
+    if cfg ~= nil and (cfg ~= f or cfgPalette ~= fp) then rsetFG(f, fp) end
+    if dx1 and dx1 > dx2 then return false end
+    return true, dx1, dy1, dx2, dy2
 end
 
 function gpu.get(x, y)
