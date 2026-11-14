@@ -184,11 +184,12 @@ end
 
 local ONE = montgomeryModP({1, 0, 0, 0, 0, 0, 0})
 
--- exponentBinary: 168 bits, least significant first
+-- exponentBinary: up to 168 bits as text, "0" or "1" each, least significant first
+local byte = string.byte
 local function expModP(base, exponentBinary)
     local result = ONE
     for i = 1, 168 do
-        if exponentBinary[i] == 1 then
+        if byte(exponentBinary, i) == 49 then
             result = mul(result, base)
         end
         base = sqr(base)

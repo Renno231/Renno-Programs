@@ -3,7 +3,7 @@ if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
     error((path or "modq.lua").." is a private sublibrary of ecc, use the ecc library instead")
 end
 local unpack, setmetatable, assert, type = table.unpack, setmetatable, assert, type
-local sunpack = string.unpack
+local sunpack, byte = string.unpack, string.byte
 
 -- Arithmetic on the Finite Field of Integers modulo q
 -- Where q is the generator's subgroup order.
@@ -23,7 +23,8 @@ local decodeInt = lazyLoad("arith", "decodeInt")
 local modQMT
 
 local q = {9622359, 6699217, 13940450, 16775734, 16777215, 16777215, 3940351}
-local qMinusTwoBinary = {1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1}
+-- One "0" or "1" per bit, least significant first (expModQ).
+local qMinusTwoBinary = "1010101011001011010010011000101100011100011001100100011101101101001010110110110001011111111111111111111111111111111111111111111111111111111111111111111111111000001111"
 
 -- We're using the Montgomery Reduction for fast modular multiplication.
 -- https://en.wikipedia.org/wiki/Montgomery_modular_multiplication 
@@ -98,7 +99,7 @@ local function expModQ(base, exponentBinary)
     local result = {unpack(ONE)}
 
     for i = 1, 168 do
-        if exponentBinary[i] == 1 then
+        if byte(exponentBinary, i) == 49 then
             result = multModQ(result, base)
         end
         base = squareModQ(base)
