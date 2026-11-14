@@ -335,99 +335,74 @@ function RemoteProxy:__index(key)
     
     -- For remote functions, return a callable wrapper without checking documentation
     return function(...)
-        return self:callRemoteFunction(key, self:keyFor(key), nil, nil, ...)
+        local callKey = nil
+        if self.keys and type(self.keys) == "table" then
+            local keyVal = self.keys[key]
+            if type(keyVal) == "string" then
+                callKey = keyVal
+            end
+        end
+        return self:callRemoteFunction(key, callKey, nil, ...)
     end
 end
 
--- Calls through proxy:async(callback).fn(...) return at once and later call callback(...) with
--- what the function returned, or callback(false, reason). deadline: seconds the call may take at
--- most; without one it waits as long as the peer answers (see PING).
-function RemoteProxy:async(callback, deadline)
+function RemoteProxy:async(callback)
+    -- Return a temporary object to capture the function name via __index
     return setmetatable({}, {
         __index = function(_, fnName)
+            -- Return the closure that actually executes the call
             return function(...)
-                return self:callRemoteFunction(fnName, self:keyFor(fnName), callback, deadline, ...)
+                -- Resolve the access key (same logic as standard calls)
+                local callKey = nil
+                if self.keys and type(self.keys) == "table" then
+                    local keyVal = self.keys[fnName]
+                    if type(keyVal) == "string" then
+                        callKey = keyVal
+                    end
+                end
+                
+                -- Execute internally with the callback
+                return self:callRemoteFunction(fnName, callKey, callback, ...)
             end
         end
     })
 end
 
--- proxy:within(seconds).fn(...): a waiting call that gives up after seconds.
-function RemoteProxy:within(deadline)
-    return setmetatable({}, {
-        __index = function(_, fnName)
-            return function(...)
-                return self:callRemoteFunction(fnName, self:keyFor(fnName), nil, deadline, ...)
-            end
-        end
-    })
-end
-
-function RemoteProxy:keyFor(fnName)
-    local key = type(self.keys) == "table" and self.keys[fnName]
-    return type(key) == "string" and key or nil
-end
-
--- A call waits for its answer as long as the peer answers: every PING seconds without one it
--- pings the peer, and it gives up once the peer has said nothing for SILENT seconds (a peer off,
--- gone or out of range). Both run on game time, so lag stretches them with the peer.
-local PING, SILENT = 2, 10
-
--- Why a call waiting since start should stop, or nil while it may go on.
-local function stopped(self, call, fnName, start, deadline)
-    local now = computer.uptime()
-    if not self.conn.connected then return "Connection closed calling remote function: " .. fnName end
-    if deadline and now - start >= deadline then return "Timeout calling remote function: " .. fnName end
-    if now - math.max(start, self.conn.last_activity or 0) >= SILENT then
-        return "No answer calling remote function: " .. fnName
-    end
-    if now - (call.pinged or start) >= PING then
-        call.pinged = now
-        self.conn:send("rpc", RPC_TYPE_PING)
-    end
-end
-
-function RemoteProxy:callRemoteFunction(fnName, callKey, asyncCallback, deadline, ...)
+function RemoteProxy:callRemoteFunction(fnName, callKey, asyncCallback, ...)
     if not self.connected then
         error("Connection is closed")
     end
-
+    
     local callId = self:nextCallId()
     local isAsync = type(asyncCallback) == "function"
     local call = {responseType = RPC_TYPE_RESPONSE, callback = isAsync and asyncCallback or nil}
     self.pending[callId] = call
-    local start = computer.uptime()
     if isAsync then
         -- An unanswered call ends like a waiting one: callback(false, reason).
-        call.timer = require("event").timer(0.5, function()
+        call.timer = require("event").timer(10, function()
             if self.pending[callId] ~= call then return end
-            local reason = stopped(self, call, fnName, start, deadline)
-            if not reason then return end
-            require("event").cancel(call.timer)
             self.pending[callId] = nil
-            asyncCallback(false, reason)
-        end, math.huge)
+            asyncCallback(false, "Timeout calling remote function: " .. fnName)
+        end)
     end
-
+    
     local args = table.pack(...)
     self.conn:send("rpc", RPC_TYPE_CALL, fnName, callId, args, callKey)
-
+    
     if isAsync then
         return true
     end
 
-    local reason
-    while not call.received do
-        reason = stopped(self, call, fnName, start, deadline)
-        if reason then break end
-        os.sleep(0.05)
+    local start = computer.uptime()
+    while computer.uptime() - start < 10 and not call.received do
+        os.sleep()
     end
-
+    
     self.pending[callId] = nil
     if not call.received then
-        return false, reason
+        return false, ("Timeout calling remote function: " .. fnName)
     end
-
+    
     local result = call.error and table.pack(false, call.error) or call.response
     if type(result) == "table" then
         return table.unpack(result, 1, result.n or #result)
