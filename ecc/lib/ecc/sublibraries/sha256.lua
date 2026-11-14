@@ -93,9 +93,14 @@ local function digest(data)
     return strToByteArr(digestString(mapToStr(data or "")))
 end
 
-local function hmac(data, key)
+-- The HMAC as a string, for callers that work on strings (ecc.encrypt and ecc.decrypt).
+local function hmacRaw(data, key)
     local inner, outer = hmacStates(mapToStr(key))
-    return strToByteArr(hmacString(mapToStr(data), inner, outer))
+    return hmacString(mapToStr(data), inner, outer)
+end
+
+local function hmac(data, key)
+    return strToByteArr(hmacRaw(data, key))
 end
 
 local function pbkdf2(pass, salt, iter, dklen)
@@ -132,5 +137,6 @@ end
 
 sha256.digest = digest
 sha256.hmac = hmac
+sha256.hmacRaw = hmacRaw
 sha256.pbkdf2 = pbkdf2
 return sha256

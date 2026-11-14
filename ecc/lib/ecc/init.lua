@@ -64,37 +64,28 @@ end
 
 -- actual cryptography
 
+-- Sealed layout: nonce (12 bytes) | ciphertext | HMAC-SHA256 of nonce and ciphertext (32 bytes).
+-- Both work on strings: a byte table costs about 16 bytes per byte, and unpacking one into
+-- string.char runs out of memory for data of a few kilobytes.
 local function encrypt(data, key)
     key = mapToStr(key)
-    local encKey = ecc.sha256.hmac("encKey", key)
-    local macKey = ecc.sha256.hmac("macKey", key)
+    local encKey = ecc.sha256.hmacRaw("encKey", key)
+    local macKey = ecc.sha256.hmacRaw("macKey", key)
     -- A random nonce: game time repeats within a tick and after /time set, and a repeated
     -- nonce under the same key exposes both plaintexts.
-    local nonce = {table.unpack(ecc.random.random(), 1, 12)}
-    local ciphertext = ecc.chacha20.crypt(mapToStr(data), encKey, nonce)
-
-    local result = nonce
-    for i = 1, #ciphertext do
-        result[#result + 1] = ciphertext[i]
-    end
-    local mac = ecc.sha256.hmac(result, macKey)
-    for i = 1, #mac do
-        result[#result + 1] = mac[i]
-    end
-
-    return setmetatable(result, byteTableMT)
+    local nonce = string.char(table.unpack(ecc.random.random(), 1, 12))
+    local sealed = nonce .. ecc.chacha20.cryptRaw(mapToStr(data), encKey, nonce)
+    return sealed .. ecc.sha256.hmacRaw(sealed, macKey)
 end
 
 local function decrypt(data, key)
     data = mapToStr(data)
     key = mapToStr(key)
-    local encKey = ecc.sha256.hmac("encKey", key)
-    local macKey = ecc.sha256.hmac("macKey", key)
-    local mac = ecc.sha256.hmac(data:sub(1, -33), macKey)
+    local encKey = ecc.sha256.hmacRaw("encKey", key)
+    local macKey = ecc.sha256.hmacRaw("macKey", key)
+    local mac = strToByteArr(ecc.sha256.hmacRaw(data:sub(1, -33), macKey))
     assert(mac:isEqual(strToByteArr(data:sub(-32))), "invalid mac")
-    local result = ecc.chacha20.crypt(data:sub(13, -33), encKey, data:sub(1, 12))
-
-    return setmetatable(result, byteTableMT)
+    return ecc.chacha20.cryptRaw(data:sub(13, -33), encKey, data:sub(1, 12))
 end
 
 local function key(seed)
@@ -215,8 +206,8 @@ if not fs.exists(subPath) then
 end
 
 --available functions
-ecc.encrypt = encrypt                       --(data, key): table
-ecc.decrypt = decrypt                       --(data, key): table
+ecc.encrypt = encrypt                       --(data, key): string
+ecc.decrypt = decrypt                       --(data, key): string
 ecc.aencrypt = asymEncrypt --asymmetrical   --(publicKey, data):string
 ecc.adecrypt = asymDecrypt --asymmetrical   --(publicKey, data):string
 ecc.key = key --single key                  --(seed): string

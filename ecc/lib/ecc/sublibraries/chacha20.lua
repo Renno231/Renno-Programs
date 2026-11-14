@@ -60,7 +60,8 @@ local function hashBlock(st, rounds)
         (x13 + st[13]) & M, (x14 + st[14]) & M, (x15 + st[15]) & M, (x16 + st[16]) & M
 end
 
-local function crypt(data, key, nonce, cntr, round)
+-- The keystream XOR as a string, for callers that work on strings (ecc.encrypt and ecc.decrypt).
+local function cryptRaw(data, key, nonce, cntr, round)
     data = mapToStr(data)
     key = mapToStr(key)
     nonce = mapToStr(nonce)
@@ -98,8 +99,9 @@ local function crypt(data, key, nonce, cntr, round)
             yielded = clock()
         end
     end
-    return strToByteArr(concat(out))
+    return concat(out)
 end
 
-chacha20.crypt = crypt
+chacha20.crypt = function(...) return strToByteArr(cryptRaw(...)) end
+chacha20.cryptRaw = cryptRaw
 return chacha20
