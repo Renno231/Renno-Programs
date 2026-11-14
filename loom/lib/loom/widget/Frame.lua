@@ -213,7 +213,11 @@ function Frame:_initBuffer()
         self._buffer, self._bufferArea = buffer, rwidth * rheight
         self._lastDrawLog = nil -- a new buffer is drawn whole
     end
-    local screenBuffer = gpu.getActiveBuffer()
+    -- A root frame draws onto the screen (buffer 0), never whichever buffer the GPU has active: OC
+    -- saves the GPU and the computer's Lua at different moments, so a computer saved during a draw
+    -- (a server stop, a chunk unloading) can come back with a buffer active that its Lua has
+    -- already left, and taking that buffer for the screen would draw into it from then on.
+    local screenBuffer = 0
     if buffer then
         gpu.setActiveBuffer(buffer)
         if not self:backgroundColor() then --start from what is on screen, for transparency
@@ -244,7 +248,13 @@ function Frame:_blit(screenBuffer, buffer, x, y, w, h)
             from, fx, fy = stage, 1, 1
         end
     end
-    gpu.bitblt(screenBuffer, x, y, w, h, from, bitBltFix and fy or fx, bitBltFix and fx or fy)
+    -- OC refuses an over-budget copy to the screen once, then waits out the cost on the next call.
+    -- A server restart during that wait resumes the call on a new GPU, which refuses it again, and
+    -- the call errors with nil; the second call is OC's own wait.
+    local fromX, fromY = bitBltFix and fy or fx, bitBltFix and fx or fy
+    if not pcall(gpu.bitblt, screenBuffer, x, y, w, h, from, fromX, fromY) then
+        gpu.bitblt(screenBuffer, x, y, w, h, from, fromX, fromY)
+    end
 end
 
 ---Finish drawing a root frame: copy what changed in its buffer to the screen.
