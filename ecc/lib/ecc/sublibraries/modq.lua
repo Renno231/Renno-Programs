@@ -3,6 +3,7 @@ if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
     error((path or "modq.lua").." is a private sublibrary of ecc, use the ecc library instead")
 end
 local unpack, setmetatable, assert, type = table.unpack, setmetatable, assert, type
+local sunpack = string.unpack
 
 -- Arithmetic on the Finite Field of Integers modulo q
 -- Where q is the generator's subgroup order.
@@ -133,8 +134,12 @@ local function encodeModQ(a)
     return setmetatable(result, byteTableMT)
 end
 
+-- Reads the 21 bytes as seven little-endian 24-bit limbs, as decodeInt does, without a byte table.
 local function decodeModQ(s)
-    local result = decodeInt(strToByteArr(mapToStr(s):sub(1, 21)))
+    s = mapToStr(s)
+    assert(#s >= 21, "integer decoding failure")
+    local result = {sunpack("<I3I3I3I3I3I3I3", s)}
+    result[8] = nil -- sunpack's next-position return
     result[7] = result[7] % q[7]
 
     return setmetatable(result, modQMT)
@@ -154,7 +159,7 @@ local function randomModQ()
 end
 
 local function hashModQ(data)
-    return decodeModQ(sha256.digest(data))
+    return decodeModQ(sha256.digestRaw(data))
 end
 
 modQMT = {

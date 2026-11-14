@@ -4,6 +4,7 @@ if not (ecc and mapToStr and lazyLoad and strToByteArr and byteTableMT) then
     error((path or "curve.lua").."is a private sublibrary of ecc, use the ecc library instead")
 end
 local unpack, setmetatable, assert, type = table.unpack, setmetatable, assert, type
+local spack, sunpack, srep, concat, tmove = string.pack, string.unpack, string.rep, table.concat, table.move
 
 -- Elliptic curve arithmetic
 local curve = {}
@@ -239,26 +240,81 @@ local function scalarMult(multiplier, P1)
     return setmetatable(Q, pointMT)
 end
 
+-- pointAdd with Z2 = 1 (an affine P2 = (x2:y2:1)): Z1 * Z2 is Z1, so one multiplication less.
+local function pointAddAffine(P1, x2, y2)
+    -- 9M + 1S
+    local X1, Y1, Z1 = P1[1], P1[2], P1[3]
+
+    local B = squareModP(Z1)
+    local C = multModP(X1, x2)
+    local D = multModP(Y1, y2)
+    local E = multModP(d, multModP(C, D))
+    local F = subModP(B, E)
+    local G = addModP(B, E)
+    local X3 = multModP(Z1, multModP(F, subModP(multModP(addModP(X1, Y1), addModP(x2, y2)), addModP(C, D))))
+    local Y3 = multModP(Z1, multModP(G, subModP(D, C)))
+    local Z3 = multModP(F, G)
+
+    return {X3, Y3, Z3}
+end
+
 -- Lookup table 4-ary NAF method for scalar multiplication by G.
--- Precomputations for the regular NAF method are done before the multiplication.
-local GTable = {G}
-for i = 2, 168 do
-    GTable[i] = pointDouble(GTable[i - 1])
+-- GTable holds 2^(i-1) * G for i = 1..168 as affine x and y, seven 24-bit limbs each, packed in
+-- one string: 42 bytes a point, where projective points of limb tables took about 600. Only
+-- keypair and sign multiply by G, so it is built on first use rather than when curve loads.
+local LIMBS = "<I3I3I3I3I3I3I3"
+local GTable
+
+local function limbsAt(s, pos)
+    local a1, a2, a3, a4, a5, a6, a7 = sunpack(LIMBS, s, pos)
+    return {a1, a2, a3, a4, a5, a6, a7}
+end
+
+-- The given limb tables packed into one string. A single pack call: strings of 40 bytes or less
+-- are interned, and a thousand of them alive at once grow Lua's string table for good.
+local function packLimbs(...)
+    local n, flat = select("#", ...), {}
+    for i = 1, n do tmove((select(i, ...)), 1, 7, i * 7 - 6, flat) end
+    return spack("<" .. srep("I3", n * 7), unpack(flat, 1, n * 7))
+end
+
+local function buildGTable()
+    -- Doubling runs in projective coordinates; scaling each point to Z = 1 shares one inversion
+    -- (Montgomery's trick): invert the product of all Z, then peel each 1/Z off it with two
+    -- multiplications. The projective points and running products wait packed, as above.
+    local packed = {}
+    local P, product = G, ONE
+    for i = 1, 168 do
+        product = multModP(product, P[3])
+        packed[i] = packLimbs(P[1], P[2], P[3], product)
+        if i < 168 then P = pointDouble(P) end
+    end
+    local inverse = expModP(product, pMinusTwoBinary) -- 1 / (Z1 * ... * Z168)
+    for i = 168, 1, -1 do
+        local s = packed[i]
+        local zInverse = i > 1 and multModP(inverse, limbsAt(packed[i - 1], 64)) or inverse
+        inverse = multModP(inverse, limbsAt(s, 43))
+        packed[i] = packLimbs(multModP(limbsAt(s, 1), zInverse), multModP(limbsAt(s, 22), zInverse))
+    end
+    return concat(packed)
 end
 
 local function scalarMultG(multiplier)
+    GTable = GTable or buildGTable()
     local naf = NAF(multiplier, 2)
-    local Q = {{unpack(ZERO)}, {unpack(ONE)}, {unpack(ONE)}}
+    local Q
 
     for i = 1, 168 do
-        if naf[i] == 1 then
-            Q = pointAdd(Q, GTable[i])
-        elseif naf[i] == -1 then
-            Q = pointSub(Q, GTable[i])
+        local digit = naf[i]
+        if digit ~= 0 then
+            local x, y = limbsAt(GTable, i * 42 - 41), limbsAt(GTable, i * 42 - 20)
+            if digit < 0 then x = subModP(ZERO, x) end
+            -- The first term starts Q directly: adding it to the identity gives the same point.
+            Q = Q and pointAddAffine(Q, x, y) or {x, y, {unpack(ONE)}}
         end
     end
 
-    return setmetatable(Q, pointMT)
+    return setmetatable(Q or {{unpack(ZERO)}, {unpack(ONE)}, {unpack(ONE)}}, pointMT)
 end
 
 -- Point compression and encoding.

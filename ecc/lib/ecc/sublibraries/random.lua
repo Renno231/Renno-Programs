@@ -18,7 +18,7 @@ local function feed(data)
 end
 
 local function digest()
-    entropy = tostring(sha256.digest(entropy .. accumulator))
+    entropy = sha256.digestRaw(entropy .. accumulator)
     accumulator = ""
 end
 
@@ -65,8 +65,8 @@ local function save()
     digest()
 
     local entropyFile = io.open(entropyPath, "wb")
-    entropyFile:write(tostring(sha256.hmac("save", entropy)))
-    entropy = tostring(sha256.digest(entropy))
+    entropyFile:write(sha256.hmacRaw("save", entropy))
+    entropy = sha256.digestRaw(entropy)
     entropyFile:close()
 end
 save()
@@ -90,7 +90,7 @@ local function newRandom()
     digest()
 
     local result = sha256.hmac("out", entropy)
-    entropy = tostring(sha256.digest(entropy))
+    entropy = sha256.digestRaw(entropy)
 
     return result
 end
