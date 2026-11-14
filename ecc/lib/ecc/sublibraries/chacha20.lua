@@ -77,7 +77,10 @@ local function cryptRaw(data, key, nonce, cntr, round)
     st[14], st[15], st[16] = sunpack("<I4I4I4", nonce)
     st[17] = nil -- sunpack's next-position return
 
-    local out = {}
+    -- Blocks are joined into a chunk every 64 (4 KB) and the chunks joined in pairs at the end:
+    -- one table.concat of the whole output grows a buffer that cannot collect garbage, and fails
+    -- when garbage fills memory however much a collection would free. a .. b collects first.
+    local out, b, chunks, c = {}, 0, {}, 0
     local len = #data
     local yielded = clock()
     for pos = 1, len, 64 do
@@ -91,14 +94,33 @@ local function cryptRaw(data, key, nonce, cntr, round)
         local d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16 = sunpack(WORDS16, src, at)
         local block = spack(WORDS16, d1 ~ k1, d2 ~ k2, d3 ~ k3, d4 ~ k4, d5 ~ k5, d6 ~ k6, d7 ~ k7, d8 ~ k8,
             d9 ~ k9, d10 ~ k10, d11 ~ k11, d12 ~ k12, d13 ~ k13, d14 ~ k14, d15 ~ k15, d16 ~ k16)
-        out[#out + 1] = n < 64 and block:sub(1, n) or block
+        b = b + 1
+        out[b] = n < 64 and block:sub(1, n) or block
+        if b == 64 then
+            c = c + 1
+            chunks[c] = concat(out, "", 1, b)
+            b = 0
+        end
         -- Yield after about 50 ms of CPU so other programs and events keep running.
         if clock() - yielded > 0.05 then
             sleep(0)
             yielded = clock()
         end
     end
-    return concat(out)
+    c = c + 1
+    chunks[c] = concat(out, "", 1, b)
+    out = nil
+    while c > 1 do
+        local m = 0
+        for j = 1, c, 2 do
+            local x, y = chunks[j], chunks[j + 1]
+            chunks[j], chunks[j + 1] = nil, nil
+            m = m + 1
+            chunks[m] = y and x .. y or x
+        end
+        c = m
+    end
+    return chunks[1]
 end
 
 chacha20.crypt = function(...) return strToByteArr(cryptRaw(...)) end
