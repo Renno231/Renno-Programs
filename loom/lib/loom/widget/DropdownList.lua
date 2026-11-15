@@ -7,7 +7,7 @@ local Widget = require("loom.widget.Widget")
 local SortedList = require("loom").widget.SortedList
 local DropdownList = class(Widget)
 
-function DropdownList:new(parent, x, y, width, height, backgroundColor, listobj) --not designed to work inside of UILayout
+function DropdownList:new(parent, x, y, width, height, backgroundColor, listobj) -- in a UIGrid, the list hangs under it, not in a cell
     checkArg(1, parent, 'table')
     checkArg(2, x, 'number')
     checkArg(3, y, 'number')
@@ -79,6 +79,13 @@ function DropdownList:drop(value) --boolean or nil
     local oldValue = self._isDropped
     if self._list and value~=nil then
         self._isDropped = value
+        if value then -- open, the list shows over the widgets beside and below the dropdown
+            local top = self._list:z()
+            for _, w in pairs((self._list:getParent() or {})._childs or {}) do
+                if w ~= self._list and w:z() >= top then top = w:z() + 1 end
+            end
+            self._list:z(top)
+        end
         self:invokeCallback(value and "dropped" or "retracted")
         self._list[self:animatedDrop() and "resizeTo" or "size"](self._list, self:width(), value and (self:listHeight() or #self._list:list()) or 0)
     end

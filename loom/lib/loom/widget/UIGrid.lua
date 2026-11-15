@@ -6,6 +6,7 @@ local Widget = require("loom.widget.Widget")
 ---its cell. Set `columns`; cells share the width unless `cellSize` fixes it, and are one row high
 ---unless `cellSize` says otherwise. `rows` limits how many rows show. Removing a child gives back
 ---the position and size it had before it joined the grid. `scrollX`/`scrollY` move the grid.
+---A child welded to another widget (a dropdown's list) stays where its weld puts it.
 ---@class UIGrid:Frame
 ---@operator call:UIGrid
 ---@overload fun(parent?:Frame,x?:number,y?:number):UIGrid
@@ -86,12 +87,17 @@ function UIGrid:_calculateGrid()
         width = math.max(1, (self:width() - 2 * inset - padX * (columns - 1)) // columns)
     end
     self:_sort()
-    for i, child in ipairs(self._childs) do
-        local column, row = (i - 1) % columns, (i - 1) // columns
-        child:visible(rows <= 0 or row < rows)
-        child._anims, child._layout = nil, nil -- the grid decides
-        child:position(1 + inset + column * (width + padX), 1 + inset + row * (height + padY))
-        child:size(width, height)
+    local i = 0
+    for _, child in ipairs(self._childs) do
+        -- A widget welded to another (a dropdown's list) goes where its weld puts it, not in a cell.
+        if not child._weld then
+            i = i + 1
+            local column, row = (i - 1) % columns, (i - 1) // columns
+            child:visible(rows <= 0 or row < rows)
+            child._anims, child._layout = nil, nil -- the grid decides
+            child:position(1 + inset + column * (width + padX), 1 + inset + row * (height + padY))
+            child:size(width, height)
+        end
     end
 end
 

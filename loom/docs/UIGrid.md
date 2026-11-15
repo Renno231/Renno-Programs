@@ -27,6 +27,8 @@ function UIGrid:addChild(containerChild)
 
 - `containerChild`: The child widget to be added.
 
+The grid places each child in a cell and sizes it to the cell, except a child welded to another widget (a dropdown's list): that one stays where its weld puts it.
+
 ### removeChild
 
 The `removeChild` method is used to remove a child widget from the grid.

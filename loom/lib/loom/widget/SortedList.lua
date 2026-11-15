@@ -31,12 +31,38 @@ function SortedList:new(parent, x, y, width, height, backgroundColor)
     o._list = {}
     o._shown = {} --used for selection
     o._selection = {} --for multi selection, selection[index] = index in _list
-    o._scrollindex = 0
+    o._scrollindex = 1
     o._showsErrors = false
     ---@cast o SortedList
     o:size(width, height)
     o:backgroundColor(backgroundColor or 0)
     return o
+end
+
+-- Rows inside the border.
+local function rows(self) return self:height() - (self:bordered() and 2 or 0) end
+
+-- Runs change (which moves rows: sorting, inserting, removing) and keeps the selection and the
+-- keyboard cursor on the items they were on, not on the row numbers.
+local function keepOnItems(self, change)
+    local list, selected, cursor = self._list, {}, self._cursor
+    for i, on in pairs(self._selection) do if on then selected[#selected + 1] = list[i] end end
+    local cursorItem = type(cursor) == "number" and list[cursor]
+    local result = table.pack(change())
+    if #selected > 0 or cursorItem ~= nil then
+        local taken, selection = {}, {}
+        for _, item in ipairs(selected) do
+            for i, v in ipairs(list) do
+                if v == item and not taken[i] then taken[i], selection[i] = true, true break end
+            end
+        end
+        self._selection = selection
+        if cursorItem ~= nil then
+            self._cursor = nil
+            for i, v in ipairs(list) do if v == cursorItem then self._cursor = i break end end
+        end
+    end
+    return table.unpack(result, 1, result.n)
 end
 
 function SortedList:maximumSelectedValues(value)
@@ -85,7 +111,7 @@ function SortedList:insert(value, index)
         end
     end
     if type(index)=='number' then
-        table.insert(self._list, index, value) 
+        keepOnItems(self, function() table.insert(self._list, index, value) end)
         self:invokeCallback("valueAdded", index, value)
     else
         table.insert(self._list, value)
@@ -102,16 +128,18 @@ function SortedList:delete(value)
         return value(self)
     elseif valueType == 'number' then --index
         if self._list[value] then
-            local removed = table.remove(self._list, value)
-            
+            self._selection[value] = nil
+            local removed = keepOnItems(self, function() return table.remove(self._list, value) end)
+
             self:invokeCallback("valueRemoved", value, removed)
             return removed
         end
     else
         for i,v in ipairs (self._list) do
             if v == value then
-                local removed = table.remove(self._list, value)
-                self:invokeCallback("valueRemoved", value, removed)
+                self._selection[i] = nil
+                local removed = keepOnItems(self, function() return table.remove(self._list, i) end)
+                self:invokeCallback("valueRemoved", i, removed)
                 return removed
             end
         end
@@ -218,7 +246,7 @@ function SortedList:scroll(value, override) --not perfect, needs refinement for 
     
     if (value ~= nil) then --and height <= shownheight then 
         if self._filter == "" or not self._filter then
-            self._scrollindex = math.max(math.min(#self._list - self:height() + 1, (override and 0 or self._scrollindex) + value), 0)
+            self._scrollindex = math.max(math.min(#self._list - rows(self) + 1, (override and 0 or self._scrollindex) + value), 1)
         elseif #self._shown > 0 then --filterBy is set and there is something to visually scroll
             local currentListIndex = self._shown[1]
             if self._contextScroll == 0 then 
@@ -245,7 +273,7 @@ function SortedList:scroll(value, override) --not perfect, needs refinement for 
                     self._highestContextIndex = currentListIndex
                 end
             end
-            self._contextScroll = math.max(math.min((self._contextEnd <= self:height() and self._contextScroll or #self._list), self._contextScroll + value), self._contextStart)
+            self._contextScroll = math.max(math.min((self._contextEnd <= rows(self) and self._contextScroll or #self._list), self._contextScroll + value), self._contextStart)
         end
     end
     return oldValue
@@ -281,8 +309,6 @@ end
 
 -- Keyboard: a cursor row, shown while focused. Up/Down move it (scrolling as needed) and leave the
 -- list at its top and bottom; Enter/Space touch the row, or deselect it if it is the only selection.
-
-local function rows(self) return self:height() - (self:bordered() and 2 or 0) end
 
 ---Put the cursor on a visible row and return that row, or nil if the list has to scroll first.
 ---@private
@@ -366,7 +392,7 @@ function SortedList:draw() --could make it check to see if its hitting the borde
     if #self._list == 0 then return end
     local sorterFunc = self:sorter()
     if sorterFunc then 
-        local succ, err = pcall(table.sort, self._list, sorterFunc) 
+        local succ, err = pcall(keepOnItems, self, function() table.sort(self._list, sorterFunc) end)
         if not succ then
             self:_gpuset(x,y, unicode.sub(err, 1, width))
             return

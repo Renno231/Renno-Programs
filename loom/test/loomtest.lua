@@ -626,6 +626,95 @@ do
     root:Destroy()
 end
 
+-- SortedList and DropdownList: removing by value, a selection that stays on its item, scrolling
+-- to the last row with a border or a filter, one row per wheel notch, a dropdown in a grid -------
+do
+    local root = scene()
+    local function wheel(list, dir) -- one notch over the list (-1 down, 1 up)
+        computer.pushSignal("scroll", screen, list:absX() + 2, list:absY() + 2, dir, "tester") pump() root:draw()
+    end
+    local function line(list, n) -- the text of a list row, inside its border
+        local b = list:bordered() and 1 or 0
+        return (row(list:absY() + b + n - 1, list:absX() + b, list:width() - 2 * b):gsub("%s+$", ""))
+    end
+    local function picked(list) local i = list:getSelection()[1] return i and list:value(i) end
+    local items = {}
+    for i = 1, 6 do items[i] = "item" .. i end
+
+    local list = gui.SortedList(root, 2, 2, 12, 5, 0x222222)
+    list:list({"a", "b", "c"})
+    local okDel, removed = pcall(list.delete, list, "b")
+    check("delete by value removes it", okDel and removed == "b" and table.concat(list:list(), ",") == "a,c",
+        okDel and table.concat(list:list(), ",") or removed)
+
+    list:list({"b", "d"})
+    list:sorter(function(x, y) return x < y end)
+    root:draw()
+    list:select(2, true) -- d
+    list:insert("a")
+    root:draw()
+    eq("the selection stays on its item when the list sorts", picked(list), "d")
+    local plain = gui.SortedList(root, 16, 2, 12, 5, 0x222222)
+    plain:list({"x", "y", "z"})
+    plain:select(3, true)
+    plain:insert("w", 1)
+    eq("the selection stays on its item when a row goes in above", picked(plain), "z")
+    plain:delete(1)
+    eq("the selection stays on its item when a row above goes", picked(plain), "z")
+
+    local boxed = gui.SortedList(root, 2, 10, 12, 5, 0x222222) -- 3 rows inside the border
+    boxed:bordered(true)
+    boxed:list(items)
+    root:draw()
+    for _ = 1, 10 do wheel(boxed, -1) end
+    eq("a bordered list scrolls to its last row", line(boxed, 3), "item6")
+
+    local open = gui.SortedList(root, 16, 10, 12, 3, 0x222222)
+    open:list(items)
+    root:draw()
+    wheel(open, -1)
+    eq("one wheel notch scrolls one row", line(open, 1), "item2")
+
+    local found = gui.SortedList(root, 30, 10, 12, 5, 0x222222)
+    found:bordered(true)
+    found:list({"e1", "x", "e2", "x", "e3", "x", "e4", "x", "e5"})
+    found:filter(function(f, v) return v:find(f, 1, true) end)
+    found:filterBy("e")
+    root:draw()
+    for _ = 1, 10 do wheel(found, -1) end
+    eq("a filtered bordered list scrolls to its last match", line(found, 3), "e5")
+
+    input.attach()
+    for _ = 1, 10 do wheel(boxed, 1) end
+    boxed:focus() root:draw()
+    for _ = 1, 5 do key(0, K.down) root:draw() end
+    eq("the keyboard cursor scrolls a bordered list to its last row", line(boxed, 3), "▌item6")
+    input.detach()
+
+    -- A dropdown in a grid: its list hangs under it when open, over the cell below, and is
+    -- nowhere when closed; the grid's cells stay where they were.
+    local grid = gui.UIGrid(root, 50, 2)
+    grid:size(24, 8)
+    grid:columns(2)
+    grid:cellSize(10, 1)
+    grid:padding(2, 1)
+    local dropdown = gui.DropdownList(grid, 1, 1, 10, 1, 0x333333)
+    dropdown:list():list({"one", "two", "three"})
+    local cells = {}
+    for i = 1, 5 do cells[i] = gui.Rectangle(grid, 1, 1, 1, 1, 0x660000) end
+    root:draw()
+    local listed = dropdown:list()
+    eq("the cell after a dropdown is beside it", cells[1]:absX() .. "," .. cells[1]:absY(), (dropdown:absX() + 12) .. "," .. dropdown:absY())
+    check("a closed dropdown in a grid shows no list", not listed:visible() or listed:height() == 0,
+        listed:absX() .. "," .. listed:absY() .. " " .. listed:width() .. "x" .. listed:height())
+    touch(dropdown:absX() + 1, dropdown:absY())
+    root:draw()
+    eq("an open dropdown in a grid lists under itself", line(listed, 1) .. "@" .. listed:absX() .. "," .. listed:absY(),
+        "one@" .. dropdown:absX() .. "," .. (dropdown:absY() + 1))
+    eq("its list shows over the cell below", row(dropdown:absY() + 2, dropdown:absX(), 5), "two  ")
+    root:Destroy()
+end
+
 -- Draw budget: a busy screen that does not change costs few GPU calls and no screen copy ------------
 do
     local root = scene()
